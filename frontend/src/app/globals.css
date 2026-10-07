@@ -1,0 +1,24 @@
+/* frontend/app/globals.css */
+@import "tailwindcss";
+
+@theme {
+  --color-brand-gold: #F59E0B;
+  --color-brand-amber: #D97706;
+  --color-brand-crimson: #DC2626;
+  --color-brand-dark: #111827;
+  --color-brand-card: #1F2937;
+  --color-brand-cream: #FFFBEB;
+  --color-brand-accent: #EF4444;
+
+  --font-heading: var(--font-outfit);
+  --font-body: var(--font-jakarta);
+}
+
+body {
+  background-color: #111827;
+  color: #f3f4f6;
+  font-family: var(--font-jakarta), Arial, sans-serif;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

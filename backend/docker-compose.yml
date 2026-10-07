@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: mrf_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      MONGODB_URL: mongodb://mongo:27017
+    volumes:
+      - ./uploads:/app/uploads
+      - ./app:/app/app
+    depends_on:
+      - mongo
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  mongo:
+    image: mongo:7
+    container_name: mrf_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: mrf_mongo_express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017
+      ME_CONFIG_BASICAUTH: "false"
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:
