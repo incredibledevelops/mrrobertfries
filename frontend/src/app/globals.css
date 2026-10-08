@@ -22,3 +22,36 @@ body {
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ... existing @import and @theme ... */
+
+body {
+  background-color: #111827;
+  color: #f3f4f6;
+  font-family: var(--font-jakarta), Arial, sans-serif;
+  text-rendering: optimizeSpeed;
+}
+
+/* Prevent layout shift from images */
+img {
+  content-visibility: auto;
+}
+
+/* Make fonts load without blocking render */
+@font-face {
+  font-display: swap;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Reserve space for images to prevent CLS */
+.aspect-video,
+[style*="aspect"] {
+  aspect-ratio: 16 / 9;
+}

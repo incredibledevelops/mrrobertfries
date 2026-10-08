@@ -22,6 +22,11 @@ async def init_db(document_models: List[type[Document]]) -> None:
     await init_beanie(
         database=mongodb.db,
         document_models=document_models,
+        # Dev-friendly: drop and recreate any index that Beanie can't
+        # reconcile. Solves the "IndexKeySpecsConflict" error you get
+        # when a field's unique/settings change between deploys.
+        # In production you should coordinate a migration instead.
+        allow_index_dropping=True,
     )
 
 

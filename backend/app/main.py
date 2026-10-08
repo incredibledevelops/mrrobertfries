@@ -5,19 +5,25 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.v1.router import api_router
+from app.core.cache import cache
 from app.core.config import settings
 from app.core.database import close_db, init_db
+from app.core.limiter import limiter
 from app.models import ALL_DOCUMENTS
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     await init_db(ALL_DOCUMENTS)
+    await cache.init()
     for sub in ("menu", "categories", "builder"):
         os.makedirs(os.path.join(settings.UPLOAD_DIR, sub), exist_ok=True)
     yield
+    await cache.close()
     await close_db()
 
 
@@ -33,6 +39,18 @@ app = FastAPI(
     openapi_url="/openapi.json",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests. Please slow down."},
+    )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -57,12 +75,13 @@ async def root():
         "env": settings.APP_ENV,
         "status": "ok",
         "docs": "/docs",
+        "cache": cache.enabled,
     }
 
 
 @app.get("/health", tags=["Health"])
 async def health():
-    return {"status": "healthy"}
+    return {"status": "healthy", "cache": cache.enabled}
 
 
 @app.exception_handler(Exception)

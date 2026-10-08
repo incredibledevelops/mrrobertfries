@@ -1,0 +1,393 @@
+# Feature Roadmap — From MVP to Serious Platform
+
+You've built a working ordering system. Here's what separates a class project from a real product. I've organized by **impact**, **effort**, and **when to add it**. Don't build all of these — pick from each tier based on what your goal is (impress users, learn tech, or run a real business).
+
+---
+
+## 🥇 Tier 1 — Must-haves for a real business (build these first)
+
+### 1. Real-time order tracking
+**What:** Customer sees live status without refreshing — "Preparing" → "Out for delivery" → "Delivered".
+**How:** WebSockets via FastAPI (`python-socketio` or native WebSocket). Or simpler: **poll every 10s** with `setInterval` in the tracking page.
+**Why it matters:** The #1 customer complaint in food delivery is "where's my order?". Fix it and you win repeat business.
+**Effort:** Medium (polling) / High (WebSockets).
+
+### 2. SMS + WhatsApp notifications
+**What:** Send an SMS when order is paid, when it's out for delivery, and when delivered.
+**How:** **Arkesel** (Ghana-friendly SMS) or **Twilio**. For WhatsApp: **Meta Cloud API** (free tier) or **360dialog**.
+**Why:** Ghanaian customers live on WhatsApp. A "Your order is on the way 🛵" message is worth 10 emails.
+**Effort:** Low-Medium.
+
+### 3. Admin CRUD — full menu & zone management
+**What:** Add/edit/delete menu items, builder options, delivery zones, without ever touching the code.
+**How:** Forms on your admin dashboard calling your existing API endpoints.
+**Why:** Otherwise every new item requires a developer. That's a business killer.
+**Effort:** Medium.
+
+### 4. Email receipts (transactional email)
+**What:** Automatic PDF/inline receipt to customer after successful payment.
+**How:** **Resend** or **Postmark**. Send from a background task after webhook `charge.success`.
+**Why:** Professionalism + customers have proof.
+**Effort:** Low.
+
+### 5. Order state machine with guards
+**What:** Prevent invalid transitions — e.g. `delivered` can't go back to `pending`, only staff can mark `out_for_delivery`.
+**How:** Encode allowed transitions in `app/models/order.py` and validate in `crud/order.py`.
+**Why:** Prevents accidental destructive changes as your team grows.
+**Effort:** Low.
+
+### 6. Rate limiting & abuse protection
+**What:** Prevent a bot from hammering `/api/v1/orders` or `/api/v1/auth/login`.
+**How:** `slowapi` middleware. 5 req/min per IP on orders, 3 req/min on login.
+**Why:** Prevents DDoS, brute-force, and accidental double-submits.
+**Effort:** Low.
+
+### 7. Duplicate order prevention (idempotency keys)
+**What:** If a customer's network blips and the request retries, don't create 2 orders.
+**How:** Client sends `X-Idempotency-Key: <uuid>`, server stores it for 10 min and returns the same order.
+**Why:** Real problem on unreliable networks.
+**Effort:** Low.
+
+### 8. Refunds & cancellations
+**What:** Customer requests cancel before `preparing`; refund via Paystack `/refund`.
+**How:** `POST /api/v1/orders/{id}/cancel` and `POST /api/v1/payments/{ref}/refund`.
+**Why:** Trust. Paystack has a refund API — 20 lines of code.
+**Effort:** Low.
+
+---
+
+## 🥈 Tier 2 — Differentiators (build when you have paying customers)
+
+### 9. Live kitchen display system (KDS)
+**What:** A separate screen for the kitchen showing incoming orders in real time, with timers.
+**How:** React page polling `/api/v1/orders?status=paid` every 5s, big buttons for "Mark preparing" → "Ready".
+**Why:** Your staff will love it. It's how real restaurants operate.
+**Effort:** Medium.
+
+### 10. Delivery rider app / portal
+**What:** Riders see assigned orders, tap "Picked up" / "Delivered", and customers see "Rider is 5 min away".
+**How:** Simple mobile-friendly page `/rider` with JWT login. Rider role in `UserRole`.
+**Why:** Cuts the "where is my food?" calls to zero.
+**Effort:** Medium-High.
+
+### 11. Loyalty program
+**What:** Points system — 1 GH₵ spent = 1 point; 500 points = free loaded bowl.
+**How:** Add `loyalty_points` to `User`, an anonymous `customer_id` cookie, and a `POST /api/v1/loyalty/redeem`.
+**Why:** Increases repeat orders by 20–40% in food businesses.
+**Effort:** Medium.
+
+### 12. Promo codes / discounts
+**What:** `UGLEGON10` gives 10% off; `FREESHIP` waives delivery fee.
+**How:** `PromoCode` model with `code`, `discount_type` (% or fixed), `max_uses`, `expires_at`, `min_order`.
+**Why:** Marketing needs this. Also great for IG campaigns.
+**Effort:** Medium.
+
+### 13. Delivery fee zones with distance calculation
+**What:** Compute delivery fee dynamically based on distance from kitchen to address.
+**How:** **Google Maps Distance Matrix API** or **Mapbox**. Pass coordinates at checkout, server computes.
+**Why:** Fair pricing, no more fixed tiers.
+**Effort:** Medium.
+
+### 14. Push notifications (web)
+**What:** "Your order is ready!" even when the tab is closed.
+**How:** Web Push API + `pywebpush`. Store subscriptions in Mongo.
+**Why:** Increases repeat orders, especially when the customer might forget.
+**Effort:** Medium.
+
+### 15. Reviews & ratings
+**What:** After delivery, customer rates the meal 1–5 stars + comment.
+**How:** `Review` model linked to `Order` + `MenuItem`. Show average on menu cards.
+**Why:** Social proof drives sales. Also feeds back on which items to keep.
+**Effort:** Low-Medium.
+
+### 16. Favorites & reorder
+**What:** "Order again" button on past orders, plus a heart icon on menu items.
+**How:** Store `favorites: List[MenuItem]` per customer; one-click reorder creates a new order with the same items.
+**Why:** Reduces friction. Repeat customers are your bread and butter.
+**Effort:** Low.
+
+### 17. Scheduling / pre-orders
+**What:** "Deliver at 7:00 PM" or "Order for lunch tomorrow".
+**How:** Add `scheduled_for: datetime` to Order. Cron job (APScheduler or Celery) triggers payment or moves to `preparing`.
+**Why:** Corporate lunch orders. Big ticket size.
+**Effort:** Medium-High.
+
+### 18. Multi-branch support
+**What:** Two kitchens (Accra + Kumasi) with separate menus, zones, staff, and analytics.
+**How:** Add `branch_id` to relevant models. Staff see only their branch. Analytics filter by branch.
+**Why:** Required when you scale. Do it before you need it, not after.
+**Effort:** High.
+
+---
+
+## 🥉 Tier 3 — Nice-to-have / cool factor
+
+### 19. AI-powered recommendations
+**What:** "Because you ordered gizzard, try the peppered sausage."
+**How:** Simple collaborative filtering, or OpenAI/Gemini API with prompt "Given this order history, suggest 3 items from this menu."
+**Why:** Increases average order value. Also fun demo.
+**Effort:** Medium.
+
+### 20. WhatsApp bot ordering
+**What:** Customer messages "Hi" on WhatsApp, bot shows menu, takes order, sends Paystack link.
+**How:** Meta Cloud API webhook → FastAPI. Twilio WhatsApp as a shortcut.
+**Why:** Ghana-friendly. No app install needed. Huge market advantage here.
+**Effort:** High.
+
+### 21. Voice ordering (AI)
+**What:** Customer calls a number, AI takes the order.
+**How:** Twilio Voice + Deepgram (STT) + OpenAI + ElevenLabs (TTS).
+**Why:** Very cool demo. Probably premature for real use.
+**Effort:** Very High.
+
+### 22. Photo uploads by customers
+**What:** After delivery, customer uploads a photo of their bowl → goes into a "gallery" for social proof.
+**How:** You already have the `/api/v1/uploads` endpoint. Just add a public `Review` with `photos: List[str]`.
+**Effort:** Low.
+
+### 23. QR code menu / table tent
+**What:** QR code on every bag/flyer that opens your menu with a specific promo code pre-applied.
+**How:** `qrcode` Python library + query params like `?promo=UG10`.
+**Why:** Cheap marketing. Measurable attribution.
+**Effort:** Very Low.
+
+### 24. Kitchen automation (printer integration)
+**What:** When an order is paid, automatically print a ticket in the kitchen.
+**How:** **Epson ePOS SDK** for network printers, or a small Raspberry Pi running `python-escpos`.
+**Why:** Eliminates human error in busy kitchens.
+**Effort:** Medium-High (hardware).
+
+### 25. Analytics dashboard with charts
+**What:** Revenue chart, daily orders, hourly heatmap, top zones.
+**How:** **Recharts** or **Chart.js** on the frontend. Your backend already returns the daily series.
+**Why:** Visuals speak louder than numbers.
+**Effort:** Low.
+
+### 26. A/B testing on the home page
+**What:** Show two hero images, measure which drives more conversions.
+**How:** Random flag per session, log `POST /api/v1/events`.
+**Why:** Optimizes conversion by 5–15% typically.
+**Effort:** Medium.
+
+### 27. Referral program
+**What:** "Share your code, both you and your friend get 10 GH₵ off."
+**How:** `ReferralCode` per user, `Referred_By` on new signups, apply at checkout.
+**Why:** Viral growth. Costs nothing until used.
+**Effort:** Medium.
+
+---
+
+## 🔧 Backend / infrastructure improvements
+
+### 28. Background job queue
+**What:** Do slow work (emails, SMS, image resizing, Paystack refunds) in the background, not in the request.
+**How:** **APScheduler** for simple jobs, or **Celery** + Redis for bigger scale, or **Arq** (async Redis queue) — best fit for FastAPI.
+**Why:** Requests return in 50ms instead of 2s. Prevents timeouts.
+**Effort:** Medium.
+
+### 29. Structured logging & monitoring
+**What:** Every request logged with trace ID, errors forwarded to a service.
+**How:** **Loguru** + **Sentry**. Ship logs to **Logtail** or **Papertrail**.
+**Why:** When something breaks at 9 PM on Friday, you'll know.
+**Effort:** Low.
+
+### 30. Proper test suite
+**What:** Full pytest coverage of every endpoint with a test DB.
+**How:** Your `tests/` scaffold already exists. Write tests for happy + error paths.
+**Why:** Confidence to refactor. Also, most job interviews ask about this.
+**Effort:** Medium.
+
+### 31. CI/CD pipeline
+**What:** Every push runs tests, builds Docker image, deploys if green.
+**How:** **GitHub Actions** → build → push to **Render** / **Railway** / **Fly.io**.
+**Why:** Ship confidently, multiple times a day.
+**Effort:** Medium.
+
+### 32. Redis caching
+**What:** Cache menu, categories, delivery zones for 60s so every page load doesn't hit Mongo.
+**How:** `redis` + `fastapi-cache2`.
+**Why:** 10x faster menu page under load. Trivial to add.
+**Effort:** Low.
+
+### 33. Health checks & readiness probes
+**What:** `/health` (already there) + `/ready` that pings Mongo.
+**How:** Add a Mongo ping to `/health`.
+**Why:** Required for orchestrators (Kubernetes, Render, Fly).
+**Effort:** Very Low.
+
+### 34. Image CDN
+**What:** Serve menu images from Cloudinary/S3 + Cloudflare instead of local disk.
+**How:** Swap `file_storage.py` to upload to Cloudinary, return the CDN URL.
+**Why:** Disk fills up. CDN is faster. Local uploads vanish on redeploy.
+**Effort:** Low.
+
+### 35. Backup strategy
+**What:** Daily MongoDB backup to S3, 30-day retention.
+**How:** **MongoDB Atlas** has automatic backups. If self-hosted, use `mongodump` + cron + S3.
+**Why:** Losing order data is a company-ending event.
+**Effort:** Low.
+
+---
+
+## 📱 Frontend improvements
+
+### 36. PWA (Progressive Web App)
+**What:** Installable on the home screen, works offline, feels like a native app.
+**How:** `next-pwa` package. Add manifest + service worker.
+**Why:** Ghana customers have limited storage — no app store install needed.
+**Effort:** Low.
+
+### 37. Skeleton loaders
+**What:** Instead of "Loading menu..." show grey cards pulsing.
+**How:** Add skeleton components (literally 5 lines each).
+**Why:** Perceived performance. Feels 2x faster.
+**Effort:** Very Low.
+
+### 38. Optimistic UI updates
+**What:** When customer adds to cart, update UI instantly, sync with server in background.
+**How:** React 19's `useOptimistic` hook.
+**Why:** Feels instant. Eliminates waiting.
+**Effort:** Low.
+
+### 39. Image optimization
+**What:** Use Next.js `<Image>` component everywhere.
+**How:** Swap `<img>` for `<Image>` — you'll get WebP, lazy loading, and responsive sizes for free.
+**Why:** 60% smaller images = 3x faster on 3G.
+**Effort:** Very Low.
+
+### 40. Dark / light mode toggle
+**What:** Some customers browse in sunlight, some at night.
+**How:** CSS variables + `next-themes`.
+**Why:** Accessibility. Also, your design is dark — many will want light.
+**Effort:** Low.
+
+### 41. Multi-language (Twi, Ga, Ewe)
+**What:** Localized UI for non-English speakers.
+**How:** `next-intl`. Start with English + Twi.
+**Why:** Broadens your addressable market.
+**Effort:** Medium.
+
+### 42. Accessibility
+**What:** Screen reader support, keyboard navigation, WCAG AA contrast.
+**How:** `eslint-plugin-jsx-a11y`, manual testing with VoiceOver/NVDA.
+**Why:** Right thing to do. Also, some customers literally can't order without it.
+**Effort:** Low-Medium.
+
+---
+
+## 💰 Business & operations features
+
+### 43. Inventory management
+**What:** Track stock of ingredients. Auto-mark items out of stock when low.
+**How:** `Ingredient` model + `stock_count`. Deduct on each paid order. Alert when below threshold.
+**Why:** Stops selling what you can't make.
+**Effort:** Medium-High.
+
+### 44. Cost & profit tracking
+**What:** Know the margin on each item. Hide this from staff.
+**How:** Add `cost_price` to `MenuItem`. Analytics shows `revenue - cost = profit`.
+**Why:** You can't run a business without knowing margins.
+**Effort:** Low.
+
+### 45. Staff shifts & payroll
+**What:** Clock in/out for staff. Track hours.
+**How:** `Shift` model, simple UI on admin.
+**Why:** If you hire more than 3 people, you'll want this.
+**Effort:** Medium.
+
+### 46. Customer feedback loop
+**What:** After delivery, 3-question survey via SMS.
+**How:** Postmark/Arkesel template with a link to `/feedback/{orderId}`.
+**Why:** Catch bad experiences before they hit Google reviews.
+**Effort:** Low.
+
+### 47. Gift cards
+**What:** Buy a GH₵ 100 gift card, email the code, redeem at checkout.
+**How:** `GiftCard` model, `POST /api/v1/giftcards/purchase`, apply at checkout.
+**Why:** Corporate gifts, birthdays. Easy money.
+**Effort:** Medium.
+
+### 48. Subscription meal plans
+**What:** "5 lunches per week, charged every Monday."
+**How:** Paystack **subscriptions** API. `Subscription` model.
+**Why:** Predictable revenue. Great for corporate clients.
+**Effort:** High.
+
+### 49. Multi-payment methods
+**What:** Add cash on delivery, bank transfer, crypto.
+**How:** Add `payment_method` enum on Order. Cash goes to `pending` → `paid` when rider collects.
+**Why:** Some customers don't have MoMo set up.
+**Effort:** Low-Medium.
+
+### 50. Franchise / white-label
+**What:** Sell your system to other food businesses.
+**How:** Multi-tenancy with `tenant_id` on every model. Separate subdomain per tenant.
+**Why:** Whole new revenue stream.
+**Effort:** Very High.
+
+---
+
+## 🎯 My recommendation for *you* specifically
+
+Given where you are — beginner dev, working system, real business — **build in this order**:
+
+### Next 2 weeks
+1. **#3 Admin CRUD** — you can't keep editing Mongo manually
+2. **#4 Email receipts** — instant professionalism
+3. **#2 SMS via Arkesel** — customers get notified
+4. **#6 Rate limiting** — one line to prevent abuse
+5. **#7 Idempotency keys** — one line to prevent double-orders
+6. **#37 Skeleton loaders + #39 Next `<Image>`** — 30 minutes total, huge UX win
+
+### Next month
+7. **#1 Real-time tracking (polling)** — biggest visible win for customers
+8. **#25 Analytics charts** — makes admin dashboard feel real
+9. **#28 Background job queue (Arq)** — proper async patterns
+10. **#29 Sentry + Loguru** — you'll thank yourself the first time prod breaks
+
+### Next quarter
+11. **#12 Promo codes** — marketing needs it
+12. **#11 Loyalty points** — repeat orders
+13. **#10 Rider portal** — cuts support calls
+14. **#36 PWA** — feels like a real app
+
+### When you're making money
+15. **#18 Multi-branch** — before you need it, not after
+16. **#48 Subscriptions** — corporate clients
+17. **#43 Inventory** — stops selling what you can't make
+
+---
+
+## The single highest-impact feature
+
+If I had to pick **one** thing from this entire list that will move the needle most for Mr. Robert's Fries, it's this:
+
+### 🏆 **#2 — WhatsApp notifications**
+
+Not email. Not push. Not even real-time tracking. **WhatsApp.**
+
+Every single Ghanaian customer who orders will have WhatsApp. If they get:
+- "Order received ✅ Ref MRF-..." (immediately)
+- "Your food is being prepared 🍟" (in 5 min)
+- "Rider is on the way 🛵, ~15 min" (when dispatched)
+- "Delivered! Rate us ⭐⭐⭐⭐⭐" (after)
+
+…you will get **repeat orders, referrals, and zero "where's my food" calls**.
+
+Build it with **Meta Cloud API** (free up to 1000 conversations/month). It's maybe 150 lines of code total.
+
+---
+
+## How to pick — three questions
+
+1. **Does it make money?** → Do it now
+2. **Does it save time / prevent mistakes?** → Do it soon
+3. **Does it just look cool?** → Save for later
+
+---
+
+Tell me which 2–3 features you want to tackle next and I'll write the exact code — no fluff, same beginner-friendly style we've been using. My vote:
+
+**#3 Admin CRUD** + **#4 Email receipts** + **#37 Skeleton loaders**
+
+That trio takes a few hours, makes your app feel 5x more professional, and gets you ready to demo it to real customers.

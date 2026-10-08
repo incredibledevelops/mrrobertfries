@@ -10,6 +10,7 @@ class MenuItemBase(BaseModel):
     description: Optional[str] = None
     price: float = Field(ge=0)
     category_id: str
+    branch_id: Optional[str] = None
     image_url: Optional[str] = None
     tags: List[str] = []
     is_available: bool = True
@@ -27,6 +28,7 @@ class MenuItemUpdate(BaseModel):
     description: Optional[str] = None
     price: Optional[float] = None
     category_id: Optional[str] = None
+    branch_id: Optional[str] = None
     image_url: Optional[str] = None
     tags: Optional[List[str]] = None
     is_available: Optional[bool] = None
@@ -38,6 +40,8 @@ class MenuItemOut(MenuItemBase):
     id: str
     created_at: datetime
     updated_at: datetime
+    average_rating: float = 0.0
+    total_reviews: int = 0
 
 
 class StockToggle(BaseModel):

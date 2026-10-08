@@ -1,17 +1,58 @@
-// frontend/app/admin/dashboard/page.js
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { API_URL } from "@/lib/api";
+import {
+  TableSkeleton,
+  StatCardSkeleton,
+  SkeletonLine,
+  SkeletonBlock,
+} from "@/components/Skeleton";
+
+const PERIODS = [
+  { key: 7, label: "Last 7 days" },
+  { key: 30, label: "Last 30 days" },
+  { key: 90, label: "Last 90 days" },
+];
+
+const STATUS_COLORS = {
+  pending: "#9CA3AF",
+  paid: "#10B981",
+  preparing: "#F59E0B",
+  ready: "#D97706",
+  out_for_delivery: "#F97316",
+  delivered: "#059669",
+  cancelled: "#EF4444",
+  failed: "#DC2626",
+};
+
+const CHART_COLORS = ["#F59E0B", "#D97706", "#DC2626", "#10B981", "#3B82F6"];
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [token, setToken] = useState(null);
   const [orders, setOrders] = useState([]);
   const [overview, setOverview] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [loadingOrders, setLoadingOrders] = useState(true);
   const [error, setError] = useState("");
+  const [days, setDays] = useState(30);
 
   useEffect(() => {
     const t = localStorage.getItem("mrf_token");
@@ -20,28 +61,41 @@ export default function AdminDashboard() {
       return;
     }
     setToken(t);
-    loadAll(t);
+    loadOrders(t);
   }, []);
 
-  async function loadAll(t) {
+  useEffect(() => {
+    if (!token) return;
+    loadStats(token, days);
+  }, [token, days]);
+
+  async function loadStats(t, d) {
+    setLoadingStats(true);
     try {
-      const [oRes, aRes] = await Promise.all([
-        fetch(`${API_URL}/api/v1/orders?limit=100`, {
-          headers: { Authorization: `Bearer ${t}` },
-        }),
-        fetch(`${API_URL}/api/v1/analytics/overview?days=30`, {
-          headers: { Authorization: `Bearer ${t}` },
-        }),
-      ]);
-
-      if (!oRes.ok || !aRes.ok) throw new Error("Could not load admin data");
-
-      setOrders(await oRes.json());
-      setOverview(await aRes.json());
+      const res = await fetch(
+        `${API_URL}/api/v1/analytics/overview?days=${d}`,
+        { headers: { Authorization: `Bearer ${t}` } }
+      );
+      if (!res.ok) throw new Error("Could not load analytics");
+      setOverview(await res.json());
     } catch (e) {
       setError(e.message);
     } finally {
-      setLoading(false);
+      setLoadingStats(false);
+    }
+  }
+
+  async function loadOrders(t) {
+    try {
+      const res = await fetch(`${API_URL}/api/v1/orders?limit=100`, {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (!res.ok) throw new Error("Could not load orders");
+      setOrders(await res.json());
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoadingOrders(false);
     }
   }
 
@@ -57,133 +111,471 @@ export default function AdminDashboard() {
       });
       if (!res.ok) throw new Error("Failed to update");
       const updated = await res.json();
-      setOrders(prev => prev.map(o => (o.id === updated.id ? updated : o)));
+      setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
     } catch (e) {
       alert(e.message);
     }
   }
 
-  function logout() {
-    localStorage.removeItem("mrf_token");
-    router.push("/admin");
-  }
+  // Recharts axis coloring
+  const axisProps = {
+    stroke: "#6B7280",
+    tick: { fill: "#9CA3AF", fontSize: 11 },
+    tickLine: false,
+  };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-brand-gold">Loading dashboard...</div>;
-  if (error) return <div className="min-h-screen flex items-center justify-center text-red-400">{error}</div>;
+  const tooltipStyle = {
+    backgroundColor: "#111827",
+    border: "1px solid #374151",
+    borderRadius: 12,
+    color: "#F9FAFB",
+  };
 
   return (
-    <div className="min-h-screen bg-brand-dark text-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="font-heading text-3xl font-extrabold text-white">Admin Dashboard</h1>
-          <button onClick={logout} className="px-4 py-2 rounded-xl bg-brand-crimson text-white text-sm font-bold">
-            Logout
-          </button>
+    <div>
+      {/* Header + period switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="font-heading text-3xl font-extrabold text-white">
+            Analytics
+          </h1>
+          <p className="text-gray-400 text-sm mt-1">
+            Revenue, orders, and trends at a glance.
+          </p>
+        </div>
+        <div className="flex gap-2 bg-brand-card border border-gray-700 rounded-xl p-1">
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setDays(p.key)}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+                days === p.key
+                  ? "bg-brand-gold text-brand-dark"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* KPI CARDS with week-over-week deltas */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {loadingStats || !overview ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              label="Total Revenue"
+              value={`GH₵ ${overview.summary.total_revenue.toFixed(2)}`}
+              color="text-brand-gold"
+              delta={overview.weekly?.revenue_change_pct}
+            />
+            <KpiCard
+              label="Total Orders"
+              value={overview.summary.total_orders}
+              color="text-white"
+              delta={overview.weekly?.orders_change_pct}
+            />
+            <KpiCard
+              label="Avg Order Value"
+              value={`GH₵ ${overview.summary.average_order_value.toFixed(2)}`}
+              color="text-emerald-400"
+            />
+            <KpiCard
+              label="Pending"
+              value={overview.summary.pending_orders}
+              color="text-amber-400"
+            />
+          </>
+        )}
+      </div>
+
+      {/* Secondary stats row */}
+      {overview && !loadingStats && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <SmallStat
+            label="Promo Discounts"
+            value={`GH₵ ${overview.summary.total_promo_discount.toFixed(2)}`}
+            color="text-brand-crimson"
+          />
+          <SmallStat
+            label="Loyalty Redeemed"
+            value={`GH₵ ${overview.summary.total_loyalty_discount.toFixed(2)}`}
+            color="text-emerald-400"
+          />
+          <SmallStat
+            label="Points Earned / Redeemed"
+            value={`${overview.summary.total_points_earned} / ${overview.summary.total_points_redeemed}`}
+            color="text-brand-gold"
+          />
+        </div>
+      )}
+
+      {/* Revenue trend line chart */}
+      <div className="bg-brand-card border border-gray-700 rounded-2xl p-6 mb-6">
+        <h2 className="font-heading text-lg font-bold text-white mb-1">
+          Revenue Trend
+        </h2>
+        <p className="text-xs text-gray-500 mb-6">
+          Daily revenue for the selected period
+        </p>
+
+        {loadingStats || !overview ? (
+          <SkeletonBlock className="h-72" />
+        ) : overview.daily.length === 0 ? (
+          <p className="text-gray-500 text-sm">No data yet</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={288}>
+            <LineChart data={overview.daily}>
+              <defs>
+                <linearGradient id="revColor" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#F59E0B" />
+                  <stop offset="100%" stopColor="#DC2626" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="#374151" strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" {...axisProps} />
+              <YAxis {...axisProps} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                formatter={(v) => [`GH₵ ${Number(v).toFixed(2)}`, "Revenue"]}
+              />
+              <Line
+                type="monotone"
+                dataKey="revenue"
+                stroke="url(#revColor)"
+                strokeWidth={3}
+                dot={{ r: 3, fill: "#F59E0B" }}
+                activeDot={{ r: 6, fill: "#DC2626" }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Two-column row: hourly bars + status donut */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Hourly bars */}
+        <div className="bg-brand-card border border-gray-700 rounded-2xl p-6">
+          <h2 className="font-heading text-lg font-bold text-white mb-1">
+            Orders by Hour
+          </h2>
+          <p className="text-xs text-gray-500 mb-6">
+            When customers order most
+          </p>
+          {loadingStats || !overview ? (
+            <SkeletonBlock className="h-64" />
+          ) : (
+            <ResponsiveContainer width="100%" height={256}>
+              <BarChart data={overview.hourly}>
+                <CartesianGrid stroke="#374151" strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="label"
+                  interval={2}
+                  {...axisProps}
+                />
+                <YAxis {...axisProps} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v) => [`${v} orders`, "Orders"]}
+                />
+                <Bar dataKey="orders" radius={[6, 6, 0, 0]}>
+                  {overview.hourly.map((entry, i) => (
+                    <Cell key={i} fill={entry.orders > 0 ? "#F59E0B" : "#374151"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
-        {/* Stats cards */}
-        {overview && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div className="bg-brand-card border border-gray-700 rounded-2xl p-5">
-              <div className="text-xs text-gray-400 uppercase">Total Revenue</div>
-              <div className="text-2xl font-black text-brand-gold mt-1">
-                GH₵ {overview.summary.total_revenue.toFixed(2)}
-              </div>
-            </div>
-            <div className="bg-brand-card border border-gray-700 rounded-2xl p-5">
-              <div className="text-xs text-gray-400 uppercase">Total Orders</div>
-              <div className="text-2xl font-black text-white mt-1">
-                {overview.summary.total_orders}
-              </div>
-            </div>
-            <div className="bg-brand-card border border-gray-700 rounded-2xl p-5">
-              <div className="text-xs text-gray-400 uppercase">Avg Order Value</div>
-              <div className="text-2xl font-black text-emerald-400 mt-1">
-                GH₵ {overview.summary.average_order_value.toFixed(2)}
-              </div>
-            </div>
-            <div className="bg-brand-card border border-gray-700 rounded-2xl p-5">
-              <div className="text-xs text-gray-400 uppercase">Pending</div>
-              <div className="text-2xl font-black text-amber-400 mt-1">
-                {overview.summary.pending_orders}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Status donut */}
+        <div className="bg-brand-card border border-gray-700 rounded-2xl p-6">
+          <h2 className="font-heading text-lg font-bold text-white mb-1">
+            Order Status
+          </h2>
+          <p className="text-xs text-gray-500 mb-6">Distribution by state</p>
+          {loadingStats || !overview ? (
+            <SkeletonBlock className="h-64" />
+          ) : overview.status_breakdown.length === 0 ? (
+            <p className="text-gray-500 text-sm">No data yet</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={256}>
+              <PieChart>
+                <Pie
+                  data={overview.status_breakdown}
+                  dataKey="count"
+                  nameKey="label"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={95}
+                  paddingAngle={2}
+                >
+                  {overview.status_breakdown.map((s, i) => (
+                    <Cell key={i} fill={STATUS_COLORS[s.status] || CHART_COLORS[i % 5]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v, n) => [`${v} orders`, n]}
+                />
+                <Legend
+                  iconType="circle"
+                  wrapperStyle={{ fontSize: 12, color: "#9CA3AF" }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
 
+      {/* Top sellers bar + top promos + top zones */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Top sellers */}
-        {overview?.top_sellers?.length > 0 && (
-          <div className="bg-brand-card border border-gray-700 rounded-2xl p-6 mb-8">
-            <h2 className="font-heading text-lg font-bold text-white mb-4">Top Sellers (30 days)</h2>
-            <div className="space-y-2">
-              {overview.top_sellers.map((t, i) => (
-                <div key={i} className="flex justify-between text-sm">
-                  <span className="text-white">{t.quantity}× {t.name}</span>
-                  <span className="text-brand-gold font-bold">GH₵ {t.revenue.toFixed(2)}</span>
+        <div className="bg-brand-card border border-gray-700 rounded-2xl p-6">
+          <h2 className="font-heading text-lg font-bold text-white mb-4">
+            Top Sellers
+          </h2>
+          {loadingStats || !overview ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex justify-between">
+                  <SkeletonLine className="h-4 w-1/2" />
+                  <SkeletonLine className="h-4 w-16" />
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Orders table */}
-        <div className="bg-brand-card border border-gray-700 rounded-2xl p-6">
-          <h2 className="font-heading text-lg font-bold text-white mb-4">Recent Orders</h2>
-          {orders.length === 0 ? (
-            <p className="text-gray-500 text-sm">No orders yet.</p>
+          ) : overview.top_sellers.length === 0 ? (
+            <p className="text-gray-500 text-sm">No sales yet</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-400 border-b border-gray-700">
-                    <th className="py-2 pr-4">Reference</th>
-                    <th className="py-2 pr-4">Customer</th>
-                    <th className="py-2 pr-4">Zone</th>
-                    <th className="py-2 pr-4">Total</th>
-                    <th className="py-2 pr-4">Status</th>
-                    <th className="py-2 pr-4">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map(o => (
-                    <tr key={o.id} className="border-b border-gray-800">
-                      <td className="py-3 pr-4 font-mono text-xs text-gray-300">{o.reference}</td>
-                      <td className="py-3 pr-4">
-                        <div className="text-white">{o.customer.full_name}</div>
-                        <div className="text-xs text-gray-500">{o.customer.phone}</div>
-                      </td>
-                      <td className="py-3 pr-4 text-gray-400 text-xs">{o.delivery_zone_name}</td>
-                      <td className="py-3 pr-4 text-brand-gold font-bold">
-                        GH₵ {o.total.toFixed(2)}
-                      </td>
-                      <td className="py-3 pr-4">
-                        <span className="px-2 py-1 rounded-lg text-xs font-bold bg-gray-800 text-white">
-                          {o.status}
-                        </span>
-                      </td>
-                      <td className="py-3 pr-4">
-                        <select
-                          value={o.status}
-                          onChange={e => updateStatus(o.id, e.target.value)}
-                          className="bg-brand-dark border border-gray-700 text-xs text-white rounded-lg px-2 py-1"
-                        >
-                          <option value="pending">pending</option>
-                          <option value="paid">paid</option>
-                          <option value="preparing">preparing</option>
-                          <option value="out_for_delivery">out_for_delivery</option>
-                          <option value="delivered">delivered</option>
-                          <option value="cancelled">cancelled</option>
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <ResponsiveContainer width="100%" height={Math.max(160, overview.top_sellers.length * 44)}>
+              <BarChart
+                layout="vertical"
+                data={overview.top_sellers}
+                margin={{ left: 10, right: 10 }}
+              >
+                <CartesianGrid stroke="#374151" strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" {...axisProps} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={110}
+                  {...axisProps}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v) => [`${v} sold`, "Quantity"]}
+                />
+                <Bar dataKey="quantity" fill="#F59E0B" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Top promos */}
+        <div className="bg-brand-card border border-gray-700 rounded-2xl p-6">
+          <h2 className="font-heading text-lg font-bold text-white mb-4">
+            Top Promo Codes
+          </h2>
+          {loadingStats || !overview ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex justify-between">
+                  <SkeletonLine className="h-4 w-1/2" />
+                  <SkeletonLine className="h-4 w-20" />
+                </div>
+              ))}
+            </div>
+          ) : !overview.top_promos || overview.top_promos.length === 0 ? (
+            <p className="text-gray-500 text-sm">No promo usage yet</p>
+          ) : (
+            <div className="space-y-3">
+              {overview.top_promos.map((p, i) => (
+                <div key={i} className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-mono text-sm text-brand-gold font-bold truncate">
+                      {p.code}
+                    </div>
+                    <div className="text-[10px] text-gray-500">
+                      {p.times_used}× used
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-white font-bold text-sm">
+                      −GH₵ {p.discount_given.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Top zones */}
+        <div className="bg-brand-card border border-gray-700 rounded-2xl p-6">
+          <h2 className="font-heading text-lg font-bold text-white mb-4">
+            Top Delivery Zones
+          </h2>
+          {loadingStats || !overview ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex justify-between">
+                  <SkeletonLine className="h-4 w-1/2" />
+                  <SkeletonLine className="h-4 w-16" />
+                </div>
+              ))}
+            </div>
+          ) : !overview.top_zones || overview.top_zones.length === 0 ? (
+            <p className="text-gray-500 text-sm">No deliveries yet</p>
+          ) : (
+            <div className="space-y-3">
+              {overview.top_zones.map((z, i) => (
+                <div key={i}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-white truncate">{z.zone}</span>
+                    <span className="text-brand-gold font-bold ml-2">
+                      {z.orders}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-brand-amber to-brand-gold"
+                      style={{
+                        width: `${
+                          (z.orders / overview.top_zones[0].orders) * 100
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Recent orders table */}
+      <div className="bg-brand-card border border-gray-700 rounded-2xl p-6">
+        <h2 className="font-heading text-lg font-bold text-white mb-4">
+          Recent Orders
+        </h2>
+
+        {loadingOrders ? (
+          <TableSkeleton rows={6} />
+        ) : orders.length === 0 ? (
+          <p className="text-gray-500 text-sm">No orders yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-400 border-b border-gray-700">
+                  <th className="py-2 pr-4">Reference</th>
+                  <th className="py-2 pr-4">Customer</th>
+                  <th className="py-2 pr-4">Zone</th>
+                  <th className="py-2 pr-4">Promo</th>
+                  <th className="py-2 pr-4">Total</th>
+                  <th className="py-2 pr-4">Status</th>
+                  <th className="py-2 pr-4">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr key={o.id} className="border-b border-gray-800">
+                    <td className="py-3 pr-4 font-mono text-xs text-gray-300">
+                      {o.reference}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <div className="text-white">{o.customer.full_name}</div>
+                      <div className="text-xs text-gray-500">
+                        {o.customer.phone}
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4 text-gray-400 text-xs">
+                      {o.delivery_zone_name}
+                    </td>
+                    <td className="py-3 pr-4">
+                      {o.promo_code ? (
+                        <span className="font-mono text-xs text-emerald-400">
+                          {o.promo_code}
+                        </span>
+                      ) : (
+                        <span className="text-gray-600 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4 text-brand-gold font-bold">
+                      GH₵ {o.total.toFixed(2)}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className="px-2 py-1 rounded-lg text-xs font-bold bg-gray-800 text-white">
+                        {o.status}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <select
+                        value={o.status}
+                        onChange={(e) => updateStatus(o.id, e.target.value)}
+                        className="bg-brand-dark border border-gray-700 text-xs text-white rounded-lg px-2 py-1"
+                      >
+                        <option value="pending">pending</option>
+                        <option value="paid">paid</option>
+                        <option value="preparing">preparing</option>
+                        <option value="ready">ready</option>
+                        <option value="out_for_delivery">out_for_delivery</option>
+                        <option value="delivered">delivered</option>
+                        <option value="cancelled">cancelled</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, color, delta }) {
+  return (
+    <div className="bg-brand-card border border-gray-700 rounded-2xl p-5">
+      <div className="text-xs text-gray-400 uppercase">{label}</div>
+      <div className={`text-2xl font-black mt-1 ${color}`}>{value}</div>
+      {delta !== null && delta !== undefined && (
+        <div
+          className={`text-[11px] font-bold mt-2 flex items-center gap-1 ${
+            delta >= 0 ? "text-emerald-400" : "text-red-400"
+          }`}
+        >
+          <span>{delta >= 0 ? "▲" : "▼"}</span>
+          <span>{Math.abs(delta)}% vs last week</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SmallStat({ label, value, color }) {
+  return (
+    <div className="bg-brand-card border border-gray-700 rounded-2xl p-4">
+      <div className="text-[10px] text-gray-400 uppercase tracking-wider">
+        {label}
+      </div>
+      <div className={`text-lg font-black mt-1 ${color}`}>{value}</div>
     </div>
   );
 }

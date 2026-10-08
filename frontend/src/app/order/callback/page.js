@@ -3,7 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-function PaystackCallbackInner() {
+function CallbackInner() {
   const router = useRouter();
   const search = useSearchParams();
 
@@ -18,19 +18,24 @@ function PaystackCallbackInner() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-gold">
-      Redirecting...
+      <div className="text-center">
+        <div className="w-12 h-12 rounded-full border-4 border-brand-gold/30 border-t-brand-gold animate-spin mx-auto" />
+        <p className="mt-4 font-bold text-sm">Verifying payment…</p>
+      </div>
     </div>
   );
 }
 
 export default function PaystackCallback() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-gold">
-        Loading...
-      </div>
-    }>
-      <PaystackCallbackInner />
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-brand-dark text-brand-gold">
+          Loading...
+        </div>
+      }
+    >
+      <CallbackInner />
     </Suspense>
   );
 }

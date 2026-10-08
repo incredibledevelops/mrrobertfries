@@ -1,10 +1,13 @@
+from fastapi import Request
+from app.core.limiter import limiter
 from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
 from app.core.config import settings
 from app.core.deps import get_current_staff_or_admin
+from app.core.email import send_order_receipt
 from app.core.paystack import PaystackError, paystack_client
+from app.core.sms import sms_loyalty_earned, sms_order_paid
 from app.crud import order as order_crud
 from app.crud import payment as payment_crud
 from app.models.order import OrderStatus
@@ -16,6 +19,9 @@ from app.schemas.payment import (
     PaymentVerifyOut,
 )
 from app.utils.generators import generate_payment_reference
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -34,12 +40,55 @@ def _to_out(p: Payment) -> PaymentOut:
     )
 
 
+async def _safe(coro, description: str, *args):
+    """Run a coroutine, swallow exceptions, log them."""
+    try:
+        await coro(*args)
+    except Exception:
+        logger.exception("Failed: %s", description)
+
+
+async def _on_paid(order, was_already_success: bool) -> None:
+    """Shared post-payment handler used by both verify & webhook."""
+    if not order:
+        return
+    await order_crud.update_order_status(order, OrderStatus.PAID)
+
+    if was_already_success:
+        return
+
+    # 1. Receipt email
+    await _safe(send_order_receipt, "send receipt email", order)
+
+    # 2. Award loyalty points (returns 0 if already awarded)
+    earned = 0
+    try:
+        earned = await order_crud.award_loyalty_for_paid_order(order)
+    except Exception:
+        logger.exception("Failed to award loyalty points for %s", order.reference)
+
+    # 3. SMS confirmation
+    await _safe(sms_order_paid, "send paid SMS", order)
+
+    # 4. SMS about points earned
+    if earned > 0:
+        try:
+            customer = await __import__(
+                "app.crud.loyalty", fromlist=["get_customer_by_phone"]
+            ).get_customer_by_phone(order.customer.phone)
+            if customer:
+                await sms_loyalty_earned(order, earned, customer.loyalty_points)
+        except Exception:
+            logger.exception("Failed to send loyalty SMS for %s", order.reference)
+
+
 @router.post(
     "/initialize",
     response_model=PaymentInitializeOut,
     status_code=status.HTTP_201_CREATED,
 )
-async def initialize_payment(payload: PaymentInitialize):
+@limiter.limit("20/minute")
+async def initialize_payment(request: Request, payload: PaymentInitialize):
     if not payload.order_id:
         raise HTTPException(400, "order_id is required")
 
@@ -68,6 +117,8 @@ async def initialize_payment(payload: PaymentInitialize):
                 "customer_name": order.customer.full_name,
                 "customer_phone": order.customer.phone,
                 "delivery_zone": order.delivery_zone_name,
+                "promo_code": order.promo_code or "",
+                "loyalty_points_redeemed": order.loyalty_points_redeemed,
             },
             channels=["mobile_money", "card", "bank_transfer"],
         )
@@ -79,7 +130,7 @@ async def initialize_payment(payload: PaymentInitialize):
 
     data = resp["data"]
 
-    payment = await payment_crud.create_payment(
+    await payment_crud.create_payment(
         order_id=str(order.id),
         reference=reference,
         amount=amount,
@@ -113,18 +164,20 @@ async def verify_payment(reference: str):
         )
 
     data = resp["data"]
-    ps_status = data.get("status")  # success / failed / abandoned
-    order = await order_crud.get_order_by_reference(data.get("reference", reference))
+    ps_status = data.get("status")
+    order = await order_crud.get_order_by_reference(
+        data.get("metadata", {}).get("order_reference", "")
+    )
 
     if ps_status == "success":
+        was_already_success = payment.status == PaymentStatus.SUCCESS
         await payment_crud.mark_paid(
             payment,
             channel=data.get("channel"),
             gateway_response=data,
             paystack_reference=data.get("reference"),
         )
-        if order:
-            await order_crud.update_order_status(order, OrderStatus.PAID)
+        await _on_paid(order, was_already_success)
     elif ps_status in ("failed", "abandoned"):
         await payment_crud.mark_failed(payment, gateway_response=data)
         if order:
@@ -171,11 +224,11 @@ async def paystack_webhook(
         return {"status": "ignored"}
 
     payment = await payment_crud.get_by_reference(reference)
-    order = await order_crud.get_order_by_reference(
-        data.get("metadata", {}).get("order_reference", "")
-    )
+    order_ref = data.get("metadata", {}).get("order_reference", "")
+    order = await order_crud.get_order_by_reference(order_ref) if order_ref else None
 
     if event_type == "charge.success":
+        was_already_success = payment and payment.status == PaymentStatus.SUCCESS
         if payment:
             await payment_crud.mark_paid(
                 payment,
@@ -183,9 +236,7 @@ async def paystack_webhook(
                 gateway_response=data,
                 paystack_reference=data.get("reference"),
             )
-        if order:
-            await order_crud.update_order_status(order, OrderStatus.PAID)
-
+        await _on_paid(order, bool(was_already_success))
     elif event_type in ("charge.failed", "transfer.failed"):
         if payment:
             await payment_crud.mark_failed(payment, gateway_response=data)

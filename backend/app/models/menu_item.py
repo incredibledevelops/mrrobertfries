@@ -11,10 +11,18 @@ class MenuItem(Document):
     description: Optional[str] = None
     price: float = Field(ge=0)
     category_id: PydanticObjectId
+
+    # Branch scoping: None = shared across all branches
+    branch_id: Optional[PydanticObjectId] = None
+
     image_url: Optional[str] = None
-    tags: List[str] = Field(default_factory=list)  # e.g. ["loaded", "chicken"]
+    tags: List[str] = Field(default_factory=list)
     is_available: bool = True
-    stock_count: Optional[int] = None
+
+    # Inventory
+    stock_count: Optional[int] = None          # None = unlimited
+    low_stock_threshold: int = 5
+
     display_order: int = 0
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

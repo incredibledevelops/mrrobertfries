@@ -38,6 +38,8 @@ def _create_token(
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
+# ---------- Staff ----------
+
 def create_access_token(
     subject: str, extra: Optional[Dict[str, Any]] = None
 ) -> str:
@@ -54,6 +56,31 @@ def create_refresh_token(subject: str) -> str:
         subject,
         timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         "refresh",
+    )
+
+
+# ---------- Customer ----------
+
+def create_customer_access_token(
+    phone: str, customer_id: str, extra: Optional[Dict[str, Any]] = None
+) -> str:
+    payload = {"phone": phone, "cid": customer_id}
+    if extra:
+        payload.update(extra)
+    return _create_token(
+        subject=phone,
+        expires_delta=timedelta(days=settings.CUSTOMER_TOKEN_EXPIRE_DAYS),
+        token_type="customer_access",
+        extra=payload,
+    )
+
+
+def create_customer_refresh_token(phone: str, customer_id: str) -> str:
+    return _create_token(
+        subject=phone,
+        expires_delta=timedelta(days=settings.CUSTOMER_REFRESH_EXPIRE_DAYS),
+        token_type="customer_refresh",
+        extra={"cid": customer_id},
     )
 
 
