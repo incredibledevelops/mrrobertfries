@@ -1,5 +1,4 @@
 import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 import ClientShell from "@/components/ClientShell";
 import SiteShell from "@/components/site/SiteShell";
@@ -192,10 +191,6 @@ export default function RootLayout({ children }) {
         <ClientShell>
           <SiteShell>{children}</SiteShell>
         </ClientShell>
-        <Script
-          src="https://js.paystack.co/v1/inline.js"
-          strategy="afterInteractive"
-        />
       </body>
     </html>
   );
