@@ -1,34 +1,28 @@
-from typing import List
+# OLD (Motor - no longer compatible with Beanie 2.x)
+# from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+# client = AsyncIOMotorClient(settings.MONGODB_URL)
 
-from beanie import Document, init_beanie
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+# NEW (PyMongo async client - Beanie 2.x compatible)
+from pymongo import AsyncMongoClient
+from pymongo.asynchronous.database import AsyncDatabase
 
+from beanie import init_beanie
 from app.core.config import settings
 
 
 class MongoDB:
-    client: AsyncIOMotorClient | None = None
-    db: AsyncIOMotorDatabase | None = None
+    client: AsyncMongoClient | None = None
+    db: AsyncDatabase | None = None
 
 
 mongodb = MongoDB()
 
 
-async def init_db(document_models: List[type[Document]]) -> None:
-    """Initialize MongoDB client and Beanie ODM safely."""
-    mongodb.client = AsyncIOMotorClient(settings.MONGODB_URL)
-    
-    # Safely resolve the database name across different possible setting attribute names
-    db_name = getattr(
-        settings, 
-        "MONGODB_DB_NAME", 
-        getattr(settings, "DATABASE_NAME", getattr(settings, "MDB_NAME", "mrrobertfries"))
-    )
-    mongodb.db = mongodb.client[db_name]
+async def init_db(document_models: list) -> None:
+    """Initialize MongoDB client and Beanie ODM."""
+    mongodb.client = AsyncMongoClient(settings.MONGODB_URL)
+    mongodb.db = mongodb.client[settings.MONGODB_DB_NAME]
 
-    # Dev-friendly: allow index dropping so deploys don't fail when a
-    # field's unique/settings change. In production we must NOT silently
-    # drop indexes — coordinate a migration instead.
     allow_drop = settings.APP_ENV != "production"
 
     await init_beanie(
@@ -40,12 +34,12 @@ async def init_db(document_models: List[type[Document]]) -> None:
 
 async def close_db() -> None:
     if mongodb.client:
-        mongodb.client.close()
+        await mongodb.client.close()
         mongodb.client = None
         mongodb.db = None
 
 
-def get_database() -> AsyncIOMotorDatabase:
+def get_database() -> AsyncDatabase:
     if mongodb.db is None:
         raise RuntimeError("Database not initialized. Call init_db() first.")
     return mongodb.db
