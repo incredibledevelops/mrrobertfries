@@ -1,6 +1,8 @@
 from typing import List
+
 from beanie import Document, init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+
 from app.core.config import settings
 
 
@@ -15,8 +17,18 @@ mongodb = MongoDB()
 async def init_db(document_models: List[type[Document]]) -> None:
     """Initialize MongoDB client and Beanie ODM safely."""
     mongodb.client = AsyncIOMotorClient(settings.MONGODB_URL)
-    mongodb.db = mongodb.client[settings.MDB_NAME if hasattr(settings, "MDB_NAME") else settings.DATABASE_NAME]
+    
+    # Safely resolve the database name across different possible setting attribute names
+    db_name = getattr(
+        settings, 
+        "MONGODB_DB_NAME", 
+        getattr(settings, "DATABASE_NAME", getattr(settings, "MDB_NAME", "mrrobertfries"))
+    )
+    mongodb.db = mongodb.client[db_name]
 
+    # Dev-friendly: allow index dropping so deploys don't fail when a
+    # field's unique/settings change. In production we must NOT silently
+    # drop indexes — coordinate a migration instead.
     allow_drop = settings.APP_ENV != "production"
 
     await init_beanie(
