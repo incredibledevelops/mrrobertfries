@@ -16,6 +16,7 @@ from app.schemas.otp import (
     OTPRequestOut,
     OTPVerifyIn,
     OTPVerifyOut,
+    RefreshRequest,
 )
 
 router = APIRouter(prefix="/customer-auth", tags=["Customer Auth"])
@@ -25,6 +26,19 @@ router = APIRouter(prefix="/customer-auth", tags=["Customer Auth"])
 @limiter.limit("3/minute")
 async def request_otp(request: Request, payload: OTPRequestIn):
     phone = payload.phone.strip()
+    full_name = payload.full_name.strip() or "Customer"
+
+    # Pre-create or refresh the customer record so the name they typed is
+    # persisted even before they verify. OTP creation then proceeds.
+    try:
+        await customer_crud.get_or_create(phone=phone, full_name=full_name)
+    except Exception:
+        # Name capture is best-effort; never block OTP on it.
+        import logging
+        logging.getLogger(__name__).exception(
+            "Failed to pre-create customer for %s", phone
+        )
+
     otp = await otp_crud.create_otp(phone, purpose=OTPPurpose.LOGIN)
 
     sent = await sms_otp(phone, otp.code)
@@ -76,20 +90,16 @@ async def verify_otp(request: Request, payload: OTPVerifyIn):
 
 
 @router.post("/refresh", response_model=OTPVerifyOut)
-async def refresh_token(body: dict):
-    refresh_token = body.get("refresh_token")
-    if not refresh_token:
-        raise HTTPException(400, "refresh_token is required")
-
+async def refresh_token(payload: RefreshRequest):
     try:
-        payload = decode_token(refresh_token)
+        decoded = decode_token(payload.refresh_token)
     except ValueError:
         raise HTTPException(401, "Invalid refresh token")
 
-    if payload.get("type") != "customer_refresh":
+    if decoded.get("type") != "customer_refresh":
         raise HTTPException(401, "Invalid token type")
 
-    phone = payload.get("sub")
+    phone = decoded.get("sub")
     customer = await customer_crud.get_by_phone(phone)
     if not customer:
         raise HTTPException(401, "Customer not found")

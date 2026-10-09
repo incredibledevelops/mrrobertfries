@@ -2,12 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Search,
+  X,
+  AlertCircle,
+  RefreshCw,
+  AlertTriangle,
+  Package,
+  PackageX,
+  PackageCheck,
+  Building2,
+  Globe,
+  Upload,
+  Image as ImageIcon,
+  CheckCircle2,
+  UtensilsCrossed,
+  Eye,
+  EyeOff,
+  PlusCircle,
+  MinusCircle,
+  Infinity as InfinityIcon,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { SkeletonBlock, SkeletonLine } from "@/components/Skeleton";
-
-/* ------------------------------------------------------------------ */
-/*  constants                                                          */
-/* ------------------------------------------------------------------ */
 
 const TOKEN_KEY = "mrf_token";
 const TOKEN_ISSUED_AT_KEY = "mrf_token_issued_at";
@@ -26,10 +46,6 @@ const EMPTY_FORM = {
   low_stock_threshold: 5,
   display_order: 0,
 };
-
-/* ------------------------------------------------------------------ */
-/*  helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 function getAdminToken() {
   if (typeof window === "undefined") return null;
@@ -74,6 +90,36 @@ function formatGHS(v) {
   return `GH₵ ${n.toFixed(2)}`;
 }
 
+/**
+ * Turn a stored image path into an absolute URL for rendering.
+ * Handles:
+ *   - absolute URLs (http/https) — returned as-is (legacy rows)
+ *   - relative paths ("/uploads/menu/xyz.jpg") — prefixed with API_URL
+ *   - empty/null — returns ""
+ */
+function absoluteImageUrl(maybePath) {
+  if (!maybePath) return "";
+  if (/^https?:\/\//i.test(maybePath)) return maybePath;
+  if (maybePath.startsWith("/")) return `${API_URL}${maybePath}`;
+  return `${API_URL}/${maybePath}`;
+}
+
+/**
+ * Turn a possibly-absolute image URL into the form we store in the DB.
+ * Absolute URLs pointing at our own API are converted back to a path,
+ * so changing the API host later does not break stored images.
+ * Third-party URLs (e.g. Google-hosted) are kept as-is.
+ */
+function relativeImagePath(maybeUrl) {
+  if (!maybeUrl) return "";
+  if (maybeUrl.startsWith(`${API_URL}/`)) {
+    return maybeUrl.slice(API_URL.length); // "/uploads/..."
+  }
+  if (maybeUrl.startsWith("/")) return maybeUrl;
+  // Absolute URL that isn't ours — keep as-is so it still renders.
+  return maybeUrl;
+}
+
 function isLowStock(item) {
   const sc = item?.stock_count;
   if (sc === null || sc === undefined) return false;
@@ -85,22 +131,20 @@ function isOutOfStock(item) {
   return item?.stock_count === 0;
 }
 
-/* ------------------------------------------------------------------ */
-/*  UI primitives                                                      */
-/* ------------------------------------------------------------------ */
-
 function Toast({ toast }) {
   if (!toast) return null;
-  const styles =
-    toast.type === "error"
-      ? "bg-red-950/90 border-red-700 text-red-200"
-      : "bg-emerald-950/90 border-emerald-700 text-emerald-200";
+  const isError = toast.type === "error";
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${styles}`}
+      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur flex items-center gap-2 ${
+        isError
+          ? "bg-red-950/90 border-red-700 text-red-200"
+          : "bg-emerald-950/90 border-emerald-700 text-emerald-200"
+      }`}
     >
+      {isError ? <PackageX className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
       {toast.message}
     </div>
   );
@@ -219,35 +263,35 @@ function StockBadge({ item }) {
   const sc = item?.stock_count;
   if (sc === null || sc === undefined) {
     return (
-      <span className="text-[11px] text-gray-500 font-bold">
-        ∞ Unlimited
+      <span className="text-[11px] text-gray-500 font-bold flex items-center gap-1">
+        <InfinityIcon className="w-3.5 h-3.5" />
+        Unlimited
       </span>
     );
   }
   if (sc === 0) {
     return (
-      <span className="text-[11px] text-red-400 font-bold">
-        ⛔ Out of stock
+      <span className="text-[11px] text-red-400 font-bold flex items-center gap-1">
+        <PackageX className="w-3.5 h-3.5" />
+        Out of stock
       </span>
     );
   }
   if (isLowStock(item)) {
     return (
-      <span className="text-[11px] text-amber-400 font-bold">
-        ⚠️ Only {sc} left
+      <span className="text-[11px] text-amber-400 font-bold flex items-center gap-1">
+        <AlertTriangle className="w-3.5 h-3.5" />
+        Only {sc} left
       </span>
     );
   }
   return (
-    <span className="text-[11px] text-emerald-400 font-bold">
-      ✓ {sc} in stock
+    <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+      <PackageCheck className="w-3.5 h-3.5" />
+      {sc} in stock
     </span>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  page                                                               */
-/* ------------------------------------------------------------------ */
 
 export default function AdminMenu() {
   const router = useRouter();
@@ -264,7 +308,7 @@ export default function AdminMenu() {
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
-  const [tab, setTab] = useState("all"); // all | low-stock
+  const [tab, setTab] = useState("all");
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [branchFilter, setBranchFilter] = useState("all");
@@ -295,7 +339,6 @@ export default function AdminMenu() {
     []
   );
 
-  /* ---------- auth ---------- */
   useEffect(() => {
     const t = getAdminToken();
     if (!t) {
@@ -314,7 +357,6 @@ export default function AdminMenu() {
     return () => window.removeEventListener("storage", onStorage);
   }, [router]);
 
-  /* ---------- authed fetch ---------- */
   const authFetch = useCallback(
     async (url, init = {}) => {
       const headers = {
@@ -332,7 +374,6 @@ export default function AdminMenu() {
     [token, router]
   );
 
-  /* ---------- load ---------- */
   const loadAll = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -356,7 +397,6 @@ export default function AdminMenu() {
       setCategories(Array.isArray(c) ? c : []);
       setBranches(Array.isArray(b) ? b : []);
 
-      // low-stock is optional — its absence shouldn't break the page
       if (lowRes.ok) {
         const l = await readJson(lowRes);
         setLowStock(Array.isArray(l) ? l : []);
@@ -375,7 +415,6 @@ export default function AdminMenu() {
     loadAll();
   }, [token, reloadKey, loadAll]);
 
-  /* ---------- form open/close ---------- */
   const resetForm = useCallback(() => {
     setForm({
       ...EMPTY_FORM,
@@ -398,6 +437,7 @@ export default function AdminMenu() {
       price: item.price ?? "",
       category_id: item.category_id || "",
       branch_id: item.branch_id || "",
+      // Keep the stored path as-is; we render via absoluteImageUrl().
       image_url: item.image_url || "",
       tags: Array.isArray(item.tags) ? item.tags.join(", ") : "",
       is_available: !!item.is_available,
@@ -411,7 +451,6 @@ export default function AdminMenu() {
     setShowForm(true);
   }, []);
 
-  /* ---------- validation ---------- */
   const formValidation = useMemo(() => {
     const errs = {};
     if (!form.name.trim()) errs.name = "Name is required.";
@@ -444,7 +483,6 @@ export default function AdminMenu() {
 
   const formValid = Object.keys(formValidation).length === 0;
 
-  /* ---------- image upload ---------- */
   const uploadFile = useCallback(
     async (file) => {
       if (!file) return;
@@ -464,7 +502,6 @@ export default function AdminMenu() {
         fd.append("file", file);
         fd.append("subdir", "menu");
 
-        // Use XHR for upload progress
         const url = `${API_URL}/api/v1/uploads`;
         const data = await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
@@ -472,9 +509,7 @@ export default function AdminMenu() {
           xhr.setRequestHeader("Authorization", `Bearer ${token}`);
           xhr.upload.onprogress = (e) => {
             if (e.lengthComputable) {
-              setUploadProgress(
-                Math.round((e.loaded / e.total) * 90) + 10
-              );
+              setUploadProgress(Math.round((e.loaded / e.total) * 90) + 10);
             }
           };
           xhr.onload = () => {
@@ -496,13 +531,10 @@ export default function AdminMenu() {
           xhr.send(fd);
         });
 
-        const imageUrl = data?.url
-          ? data.url.startsWith("http")
-            ? data.url
-            : `${API_URL}${data.url}`
-          : "";
-        if (!imageUrl) throw new Error("Upload didn't return a URL.");
-        setForm((f) => ({ ...f, image_url: imageUrl }));
+        // Store the RELATIVE path. The render side absolutizes it.
+        const storedPath = relativeImagePath(data?.url || "");
+        if (!storedPath) throw new Error("Upload didn't return a URL.");
+        setForm((f) => ({ ...f, image_url: storedPath }));
         showToast("Image uploaded.");
         setUploadProgress(100);
       } catch (err) {
@@ -519,7 +551,6 @@ export default function AdminMenu() {
     (e) => {
       const file = e.target.files?.[0];
       if (file) uploadFile(file);
-      // allow re-selecting the same file
       e.target.value = "";
     },
     [uploadFile]
@@ -540,7 +571,6 @@ export default function AdminMenu() {
     setUploadProgress(0);
   }, []);
 
-  /* ---------- save ---------- */
   const handleSave = useCallback(
     async (e) => {
       e.preventDefault();
@@ -555,7 +585,9 @@ export default function AdminMenu() {
         price: safeNumber(form.price, 0),
         category_id: form.category_id,
         branch_id: form.branch_id || null,
-        image_url: form.image_url || null,
+        // Normalize to relative before sending, in case a legacy absolute
+        // URL is still in state.
+        image_url: form.image_url ? relativeImagePath(form.image_url) : null,
         tags: form.tags
           ? form.tags
               .split(",")
@@ -599,7 +631,6 @@ export default function AdminMenu() {
     [form, formValid, editing, authFetch, resetForm, showToast]
   );
 
-  /* ---------- delete ---------- */
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     const item = deleteTarget;
@@ -629,7 +660,6 @@ export default function AdminMenu() {
     }
   }, [deleteTarget, authFetch, showToast]);
 
-  /* ---------- toggle stock (optimistic) ---------- */
   const toggleStock = useCallback(
     async (item) => {
       if (busyIds.has(item.id)) return;
@@ -662,7 +692,7 @@ export default function AdminMenu() {
         }
         showToast(next ? "Marked as available." : "Marked as out of stock.");
       } catch (err) {
-        setItems(prev); // rollback
+        setItems(prev);
         showToast(err.message || "Toggle failed.", "error");
       } finally {
         setBusyIds((s) => {
@@ -675,7 +705,6 @@ export default function AdminMenu() {
     [items, busyIds, authFetch, showToast]
   );
 
-  /* ---------- quick restock (optimistic) ---------- */
   const quickRestock = useCallback(
     async (item, delta) => {
       if (busyIds.has(item.id)) return;
@@ -685,7 +714,6 @@ export default function AdminMenu() {
       const prev = items;
       const prevLow = lowStock;
 
-      // Optimistic
       setItems((list) =>
         list.map((i) =>
           i.id === item.id
@@ -735,7 +763,6 @@ export default function AdminMenu() {
     [items, lowStock, busyIds, authFetch, showToast]
   );
 
-  /* ---------- derived ---------- */
   const baseList = tab === "low-stock" ? lowStock : items;
   const visibleItems = useMemo(() => {
     let list = baseList;
@@ -774,7 +801,6 @@ export default function AdminMenu() {
     return m;
   }, [categories]);
 
-  /* ---------- render guard ---------- */
   if (!authChecked || !token) {
     return (
       <div>
@@ -786,7 +812,6 @@ export default function AdminMenu() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="font-heading text-3xl font-extrabold text-white">
@@ -798,13 +823,13 @@ export default function AdminMenu() {
         </div>
         <button
           onClick={openCreate}
-          className="px-5 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
         >
-          + New Item
+          <Plus className="w-4 h-4" />
+          New Item
         </button>
       </div>
 
-      {/* Tabs */}
       <div
         role="tablist"
         aria-label="Filter menu items"
@@ -827,7 +852,7 @@ export default function AdminMenu() {
           aria-selected={tab === "low-stock"}
           onClick={() => setTab("low-stock")}
           disabled={lowStock.length === 0}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/40 disabled:opacity-50 disabled:cursor-not-allowed ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/40 disabled:opacity-50 disabled:cursor-not-allowed ${
             tab === "low-stock"
               ? "bg-brand-gold text-brand-dark"
               : lowStock.length === 0
@@ -835,17 +860,15 @@ export default function AdminMenu() {
               : "bg-brand-card border border-amber-500/40 text-amber-400 hover:text-amber-300"
           }`}
         >
-          ⚠️ Low Stock ({lowStock.length})
+          <AlertTriangle className="w-3.5 h-3.5" />
+          Low Stock ({lowStock.length})
         </button>
       </div>
 
-      {/* Filters */}
       {!loading && items.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-6">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
-              🔍
-            </span>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -873,44 +896,44 @@ export default function AdminMenu() {
             className="px-3 py-2.5 rounded-xl bg-brand-card border border-gray-700 text-white text-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/40 outline-none"
           >
             <option value="all">All branches</option>
-            <option value="__shared__">🌍 Shared only</option>
+            <option value="__shared__">Shared only</option>
             {branches.map((b) => (
               <option key={b.id} value={b.id}>
-                🏢 {b.name}
+                {b.name}
               </option>
             ))}
           </select>
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div
           role="alert"
           className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-3"
         >
+          <AlertCircle className="w-5 h-5 shrink-0" />
           <span className="flex-1">{error}</span>
           <button
             onClick={() => setReloadKey((k) => k + 1)}
-            className="text-xs font-bold underline hover:no-underline"
+            className="flex items-center gap-1 text-xs font-bold underline hover:no-underline"
           >
+            <RefreshCw className="w-3 h-3" />
             Retry
           </button>
         </div>
       )}
 
-      {/* Content */}
       {loading ? (
         <MenuGridSkeleton count={6} />
       ) : visibleItems.length === 0 ? (
         <div className="bg-brand-card border border-gray-700 rounded-2xl p-12 text-center">
-          <div className="text-5xl mb-3" aria-hidden="true">
-            {tab === "low-stock"
-              ? "🎉"
-              : items.length === 0
-              ? "🍟"
-              : "🔍"}
-          </div>
+          {tab === "low-stock" ? (
+            <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+          ) : items.length === 0 ? (
+            <UtensilsCrossed className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+          ) : (
+            <Search className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+          )}
           <h2 className="font-bold text-white text-lg">
             {tab === "low-stock"
               ? "Nothing running low"
@@ -957,6 +980,7 @@ export default function AdminMenu() {
             const categoryName = item.category_id
               ? categoryMap.get(item.category_id)
               : null;
+            const displayImage = absoluteImageUrl(item.image_url);
 
             return (
               <article
@@ -969,9 +993,9 @@ export default function AdminMenu() {
                 } ${busy ? "opacity-60" : ""}`}
               >
                 <div className="relative h-40 bg-gray-800">
-                  {item.image_url ? (
+                  {displayImage ? (
                     <img
-                      src={item.image_url}
+                      src={displayImage}
                       alt={item.name}
                       loading="lazy"
                       className="w-full h-full object-cover"
@@ -980,32 +1004,41 @@ export default function AdminMenu() {
                       }}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl text-gray-600">
-                      🍟
+                    <div className="w-full h-full flex items-center justify-center">
+                      <UtensilsCrossed className="w-12 h-12 text-gray-600" />
                     </div>
                   )}
 
-                  {/* Category pill */}
                   {categoryName && (
                     <span className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-brand-dark/90 text-[10px] font-bold text-gray-300 border border-gray-700">
                       {categoryName}
                     </span>
                   )}
 
-                  {/* Availability pill */}
                   <span
-                    className={`absolute top-2 right-2 px-2 py-1 rounded-lg text-[10px] font-bold ${
+                    className={`absolute top-2 right-2 px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 ${
                       item.is_available
                         ? "bg-emerald-500/20 text-emerald-400"
                         : "bg-red-500/20 text-red-400"
                     }`}
                   >
-                    {item.is_available ? "Available" : "Unavailable"}
+                    {item.is_available ? (
+                      <>
+                        <Eye className="w-3 h-3" />
+                        Available
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="w-3 h-3" />
+                        Unavailable
+                      </>
+                    )}
                   </span>
 
                   {out && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                      <span className="text-red-400 font-black text-lg">
+                      <span className="text-red-400 font-black text-lg flex items-center gap-2">
+                        <PackageX className="w-6 h-6" />
                         SOLD OUT
                       </span>
                     </div>
@@ -1017,13 +1050,15 @@ export default function AdminMenu() {
                     {item.name}
                   </h3>
                   {branchName && (
-                    <p className="text-[10px] text-brand-gold mt-1 font-bold">
-                      🏢 {branchName}
+                    <p className="text-[10px] text-brand-gold mt-1 font-bold flex items-center gap-1">
+                      <Building2 className="w-3 h-3" />
+                      {branchName}
                     </p>
                   )}
                   {!branchName && (
-                    <p className="text-[10px] text-blue-400 mt-1 font-bold">
-                      🌍 Shared across all branches
+                    <p className="text-[10px] text-blue-400 mt-1 font-bold flex items-center gap-1">
+                      <Globe className="w-3 h-3" />
+                      Shared across all branches
                     </p>
                   )}
                   {item.description && (
@@ -1035,7 +1070,6 @@ export default function AdminMenu() {
                     {formatGHS(item.price)}
                   </div>
 
-                  {/* Stock indicator */}
                   <div className="mt-3 pt-3 border-t border-gray-800">
                     <StockBadge item={item} />
                   </div>
@@ -1048,23 +1082,26 @@ export default function AdminMenu() {
                         <button
                           onClick={() => quickRestock(item, 10)}
                           disabled={busy}
-                          className="flex-1 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 disabled:opacity-50 text-emerald-400 text-[10px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                          className="flex-1 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 disabled:opacity-50 text-emerald-400 text-[10px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40 flex items-center justify-center gap-0.5"
                         >
-                          +10
+                          <PlusCircle className="w-3 h-3" />
+                          10
                         </button>
                         <button
                           onClick={() => quickRestock(item, 25)}
                           disabled={busy}
-                          className="flex-1 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 disabled:opacity-50 text-emerald-400 text-[10px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                          className="flex-1 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 disabled:opacity-50 text-emerald-400 text-[10px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/40 flex items-center justify-center gap-0.5"
                         >
-                          +25
+                          <PlusCircle className="w-3 h-3" />
+                          25
                         </button>
                         <button
                           onClick={() => quickRestock(item, -5)}
                           disabled={busy}
-                          className="flex-1 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 disabled:opacity-50 text-red-400 text-[10px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
+                          className="flex-1 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 disabled:opacity-50 text-red-400 text-[10px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40 flex items-center justify-center gap-0.5"
                         >
-                          −5
+                          <MinusCircle className="w-3 h-3" />
+                          5
                         </button>
                       </div>
                     )}
@@ -1072,20 +1109,29 @@ export default function AdminMenu() {
                     <button
                       onClick={() => openEdit(item)}
                       disabled={busy}
-                      className="flex-1 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600"
+                      className="flex-1 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600 flex items-center justify-center gap-1"
                     >
+                      <Pencil className="w-3 h-3" />
                       Edit
                     </button>
                     <button
                       onClick={() => toggleStock(item)}
                       disabled={busy}
-                      className="flex-1 py-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 disabled:opacity-50 text-amber-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                      className="flex-1 py-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 disabled:opacity-50 text-amber-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/40 flex items-center justify-center gap-1"
                     >
-                      {busy
-                        ? "…"
-                        : item.is_available
-                        ? "Mark out"
-                        : "Mark in"}
+                      {busy ? (
+                        "…"
+                      ) : item.is_available ? (
+                        <>
+                          <EyeOff className="w-3 h-3" />
+                          Mark out
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3 h-3" />
+                          Mark in
+                        </>
+                      )}
                     </button>
                     <button
                       onClick={() => setDeleteTarget(item)}
@@ -1093,7 +1139,7 @@ export default function AdminMenu() {
                       aria-label={`Delete ${item.name}`}
                       className="px-3 py-2 rounded-lg bg-red-600/20 hover:bg-red-600/30 disabled:opacity-50 text-red-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
                     >
-                      🗑
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -1103,7 +1149,6 @@ export default function AdminMenu() {
         </div>
       )}
 
-      {/* ---------- Add/Edit form modal ---------- */}
       {showForm && (
         <Modal
           onClose={() => setShowForm(false)}
@@ -1125,15 +1170,16 @@ export default function AdminMenu() {
                 aria-label="Close"
                 className="text-gray-400 hover:text-white p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-600 disabled:opacity-50"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {formError && (
               <div
                 role="alert"
-                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs"
+                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-start gap-2"
               >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 {formError}
               </div>
             )}
@@ -1266,19 +1312,19 @@ export default function AdminMenu() {
                 }
                 className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/40 outline-none transition-colors disabled:opacity-60"
               >
-                <option value="">🌍 Shared (all branches)</option>
+                <option value="">Shared (all branches)</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    🏢 {b.name}
+                    {b.name}
                   </option>
                 ))}
               </select>
             </Field>
 
-            {/* Inventory */}
             <div className="p-4 rounded-xl bg-brand-dark border border-gray-700 space-y-3">
-              <div className="text-xs font-bold text-brand-gold uppercase tracking-wider">
-                📦 Inventory
+              <div className="text-xs font-bold text-brand-gold uppercase tracking-wider flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5" />
+                Inventory
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field
@@ -1353,7 +1399,6 @@ export default function AdminMenu() {
               />
             </Field>
 
-            {/* Image upload */}
             <div>
               <span className="block text-xs font-bold text-gray-300 mb-1">
                 Image
@@ -1374,7 +1419,7 @@ export default function AdminMenu() {
                 {form.image_url ? (
                   <>
                     <img
-                      src={form.image_url}
+                      src={absoluteImageUrl(form.image_url)}
                       alt="preview"
                       className="w-full h-40 object-cover"
                     />
@@ -1383,15 +1428,16 @@ export default function AdminMenu() {
                         type="button"
                         onClick={clearImage}
                         disabled={saving || uploading}
-                        className="px-2 py-1 rounded-lg bg-red-600/90 text-white text-[11px] font-bold hover:bg-red-600 disabled:opacity-50"
+                        className="px-2 py-1 rounded-lg bg-red-600/90 text-white text-[11px] font-bold hover:bg-red-600 disabled:opacity-50 flex items-center gap-1"
                       >
+                        <Trash2 className="w-3 h-3" />
                         Remove
                       </button>
                     </div>
                   </>
                 ) : (
                   <label className="flex flex-col items-center justify-center h-32 cursor-pointer text-gray-400 hover:text-gray-200 transition-colors">
-                    <span className="text-3xl mb-1">📷</span>
+                    <ImageIcon className="w-8 h-8 mb-1" />
                     <span className="text-xs font-bold">
                       {dragOver
                         ? "Drop image here"
@@ -1423,7 +1469,8 @@ export default function AdminMenu() {
                 )}
 
                 {form.image_url && !uploading && (
-                  <label className="absolute bottom-2 right-2 px-3 py-1.5 rounded-lg bg-black/70 text-white text-[11px] font-bold cursor-pointer hover:bg-black/90 transition-colors">
+                  <label className="absolute bottom-2 right-2 px-3 py-1.5 rounded-lg bg-black/70 text-white text-[11px] font-bold cursor-pointer hover:bg-black/90 transition-colors flex items-center gap-1">
+                    <Upload className="w-3 h-3" />
                     Replace
                     <input
                       type="file"
@@ -1450,7 +1497,6 @@ export default function AdminMenu() {
               Available for ordering
             </label>
 
-            {/* Sticky footer */}
             <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 bg-brand-card border-t border-gray-700 flex gap-3">
               <button
                 type="button"
@@ -1476,7 +1522,6 @@ export default function AdminMenu() {
         </Modal>
       )}
 
-      {/* ---------- Delete confirm ---------- */}
       {deleteTarget && (
         <Modal
           onClose={() => (deleting ? null : setDeleteTarget(null))}
@@ -1484,12 +1529,17 @@ export default function AdminMenu() {
           disableClose={deleting}
         >
           <div className="p-6 space-y-4">
-            <h3
-              id="delete-menu-title"
-              className="font-heading text-lg font-bold text-white"
-            >
-              Delete menu item?
-            </h3>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-red-400" />
+              </div>
+              <h3
+                id="delete-menu-title"
+                className="font-heading text-lg font-bold text-white"
+              >
+                Delete menu item?
+              </h3>
+            </div>
             <p className="text-sm text-gray-400">
               You're about to delete{" "}
               <span className="text-white font-bold">

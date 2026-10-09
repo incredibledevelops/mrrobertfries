@@ -131,29 +131,43 @@ async def kitchen_ws(websocket: WebSocket):
     """
     WebSocket endpoint. Client must send {"token": "<jwt>"} first.
     If the token is invalid, the connection is closed with code 1008.
-    """
-    await websocket.accept()
 
+    NOTE: `kitchen_broker.connect()` performs the single `websocket.accept()`
+    call. Do NOT call `accept()` here — doing so twice raises a RuntimeError.
+    """
     try:
         auth_message = await websocket.receive_json()
     except Exception:
-        await websocket.close(code=1008)
+        # Not yet accepted; still safe to close
+        try:
+            await websocket.close(code=1008)
+        except Exception:
+            pass
         return
 
     token = auth_message.get("token")
     if not token:
-        await websocket.close(code=1008)
+        try:
+            await websocket.close(code=1008)
+        except Exception:
+            pass
         return
 
     # Verify the token + role
     try:
         payload = decode_token(token)
     except ValueError:
-        await websocket.close(code=1008)
+        try:
+            await websocket.close(code=1008)
+        except Exception:
+            pass
         return
 
     if payload.get("type") != "access":
-        await websocket.close(code=1008)
+        try:
+            await websocket.close(code=1008)
+        except Exception:
+            pass
         return
 
     from beanie import PydanticObjectId
@@ -167,10 +181,13 @@ async def kitchen_ws(websocket: WebSocket):
         UserRole.ADMIN,
         UserRole.STAFF,
     ):
-        await websocket.close(code=1008)
+        try:
+            await websocket.close(code=1008)
+        except Exception:
+            pass
         return
 
-    # Register with the broker
+    # Register with the broker — this performs the only `accept()` call.
     await kitchen_broker.connect(websocket)
 
     try:

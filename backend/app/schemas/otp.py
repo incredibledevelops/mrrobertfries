@@ -23,3 +23,7 @@ class OTPVerifyOut(BaseModel):
     is_new_customer: bool
     customer_id: str
     full_name: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str

@@ -14,6 +14,9 @@ class LoyaltyBalanceOut(BaseModel):
     lifetime_points_redeemed: int
     cash_value: float          # points × rate
     min_redeem_points: int
+    # Rate (GH₵ per point) applied by the server. Clients MUST use this to
+    # preview redemption amounts so their totals match the server's.
+    points_to_cash_rate: float = 0.01
 
 
 class LoyaltyTransactionOut(BaseModel):

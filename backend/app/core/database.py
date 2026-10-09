@@ -19,14 +19,15 @@ async def init_db(document_models: List[type[Document]]) -> None:
     mongodb.client = AsyncIOMotorClient(settings.MONGODB_URL)
     mongodb.db = mongodb.client[settings.MONGODB_DB_NAME]
 
+    # Dev-friendly: allow index dropping so deploys don't fail when a
+    # field's unique/settings change. In production we must NOT silently
+    # drop indexes — coordinate a migration instead.
+    allow_drop = settings.APP_ENV != "production"
+
     await init_beanie(
         database=mongodb.db,
         document_models=document_models,
-        # Dev-friendly: drop and recreate any index that Beanie can't
-        # reconcile. Solves the "IndexKeySpecsConflict" error you get
-        # when a field's unique/settings change between deploys.
-        # In production you should coordinate a migration instead.
-        allow_index_dropping=True,
+        allow_index_dropping=allow_drop,
     )
 
 

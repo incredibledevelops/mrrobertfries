@@ -2,6 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import {
+  Utensils,
+  Gift,
+  Package,
+  MapPin,
+  Heart,
+  PartyPopper,
+  Share2,
+  MessageCircle,
+  Copy,
+  Check,
+  ArrowRight,
+  LogOut,
+  X,
+  Phone,
+  Smartphone,
+  AlertCircle,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 import {
   saveCustomerTokens,
@@ -12,10 +30,6 @@ import {
 import SearchBar from "@/components/SearchBar";
 import { SkeletonLine, SkeletonBlock } from "@/components/Skeleton";
 
-/* ------------------------------------------------------------------ */
-/*  constants                                                          */
-/* ------------------------------------------------------------------ */
-
 export const TABS = [
   { href: "/account", label: "Overview" },
   { href: "/account/orders", label: "My Orders" },
@@ -24,15 +38,10 @@ export const TABS = [
   { href: "/account/referrals", label: "Referrals" },
 ];
 
-// 1 point = GH₵ 0.01 (match this to your backend)
 const POINT_VALUE = 0.01;
-const NEXT_MILESTONE = 1000; // points needed for the next reward tier
-const RESEND_COOLDOWN = 30; // seconds
+const NEXT_MILESTONE = 1000;
+const RESEND_COOLDOWN = 30;
 const IS_DEV = process.env.NODE_ENV !== "production";
-
-/* ------------------------------------------------------------------ */
-/*  helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 function ghs(value) {
   const n = Number(value);
@@ -53,8 +62,6 @@ async function readJson(res) {
   }
 }
 
-// Ghanaian mobile: accept 024/054/055/059/020/050 etc., 10 digits,
-// or international +233XXXXXXXXX. Returns normalized "0XXXXXXXXX" or null.
 function normalizePhone(raw) {
   const digits = String(raw || "").replace(/\D/g, "");
   if (!digits) return null;
@@ -69,10 +76,6 @@ function isValidPhone(raw) {
   return !!normalizePhone(raw);
 }
 
-/* ------------------------------------------------------------------ */
-/*  main component                                                     */
-/* ------------------------------------------------------------------ */
-
 export default function AccountPage() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -80,19 +83,17 @@ export default function AccountPage() {
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
-  // auth state
   const [phone, setPhone] = useState("");
   const [fullName, setFullName] = useState("");
   const [code, setCode] = useState("");
-  const [stage, setStage] = useState("phone"); // "phone" | "code"
+  const [stage, setStage] = useState("phone");
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const [devCode, setDevCode] = useState(null);
   const [resendIn, setResendIn] = useState(0);
 
-  // UI state
   const [referralCopied, setReferralCopied] = useState(false);
-  const [toast, setToast] = useState(null); // { message, type }
+  const [toast, setToast] = useState(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
 
   const toastTimer = useRef(null);
@@ -106,7 +107,6 @@ export default function AccountPage() {
     []
   );
 
-  /* ---------- load profile ---------- */
   useEffect(() => {
     const token = getCustomerToken();
     if (!token) {
@@ -147,7 +147,6 @@ export default function AccountPage() {
     };
   }, [reloadKey]);
 
-  /* ---------- resend cooldown ticker ---------- */
   useEffect(() => {
     if (resendIn <= 0) return;
     const t = setInterval(() => {
@@ -156,7 +155,6 @@ export default function AccountPage() {
     return () => clearInterval(t);
   }, [resendIn]);
 
-  /* ---------- request OTP ---------- */
   const requestOTP = useCallback(
     async (e) => {
       e?.preventDefault?.();
@@ -188,7 +186,6 @@ export default function AccountPage() {
         setStage("code");
         setResendIn(RESEND_COOLDOWN);
 
-        // Only expose dev code in non-production builds
         if (IS_DEV && data.message?.startsWith("DEV MODE")) {
           const m = String(data.message).match(/(\d{4,8})/);
           setDevCode(m ? m[1] : null);
@@ -204,7 +201,6 @@ export default function AccountPage() {
     [phone, fullName]
   );
 
-  /* ---------- verify OTP ---------- */
   const verifyOTP = useCallback(
     async (e) => {
       e?.preventDefault?.();
@@ -230,7 +226,7 @@ export default function AccountPage() {
         const me = await readJson(meRes);
         setProfile(me);
         setLoggedIn(true);
-        showToast("Welcome back! 👋");
+        showToast("Welcome back!");
       } catch (err) {
         setAuthError(err.message);
       } finally {
@@ -240,7 +236,6 @@ export default function AccountPage() {
     [phone, code, showToast]
   );
 
-  /* ---------- logout ---------- */
   const doLogout = useCallback(() => {
     clearCustomerTokens();
     setLoggedIn(false);
@@ -253,23 +248,20 @@ export default function AccountPage() {
     showToast("Signed out.");
   }, [showToast]);
 
-  /* ---------- search ---------- */
   const openSearch = useCallback(() => {
     if (typeof window !== "undefined" && window.__openSearch) {
       window.__openSearch();
     }
   }, []);
 
-  /* ---------- referral helpers ---------- */
   const copyReferral = useCallback(async () => {
     if (!profile?.referral_code) return;
-    const text = profile.referral_code;
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(profile.referral_code);
       } else {
         const ta = document.createElement("textarea");
-        ta.value = text;
+        ta.value = profile.referral_code;
         ta.setAttribute("readonly", "");
         ta.style.position = "absolute";
         ta.style.left = "-9999px";
@@ -296,9 +288,7 @@ export default function AccountPage() {
           text: shareText,
         });
         return;
-      } catch {
-        // user cancelled — silently fall through to copy
-      }
+      } catch {}
     }
     await copyReferral();
   }, [profile?.referral_code, copyReferral]);
@@ -311,11 +301,6 @@ export default function AccountPage() {
     window.open(`https://wa.me/?text=${text}`, "_blank", "noopener");
   }, [profile?.referral_code]);
 
-  /* ================================================================ */
-  /*  RENDER                                                          */
-  /* ================================================================ */
-
-  /* ---------- Loading ---------- */
   if (loading) {
     return (
       <div className="min-h-screen bg-brand-dark text-gray-100">
@@ -339,14 +324,13 @@ export default function AccountPage() {
     );
   }
 
-  /* ---------- Login / OTP ---------- */
   if (!loggedIn) {
     return (
       <div className="min-h-screen bg-brand-dark flex items-center justify-center p-4">
         <div className="w-full max-w-sm bg-brand-card border border-gray-700 rounded-3xl p-8 space-y-5">
           <div className="text-center">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-gold to-brand-crimson flex items-center justify-center text-brand-dark font-black text-2xl mx-auto">
-              🍟
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-gold to-brand-crimson flex items-center justify-center text-brand-dark mx-auto">
+              <Utensils className="w-7 h-7" strokeWidth={2.5} />
             </div>
             <h1 className="font-heading text-2xl font-extrabold text-white mt-4">
               My Account
@@ -361,10 +345,10 @@ export default function AccountPage() {
           {authError && (
             <div
               role="alert"
-              aria-live="assertive"
-              className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs"
+              className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs inline-flex items-start gap-2 w-full"
             >
-              {authError}
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>{authError}</span>
             </div>
           )}
 
@@ -395,24 +379,27 @@ export default function AccountPage() {
                 >
                   Phone Number
                 </label>
-                <input
-                  id="phone"
-                  required
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="024XXXXXXX"
-                  className={`w-full px-4 py-3 rounded-xl bg-brand-dark border text-white text-sm outline-none focus:ring-2 focus:ring-brand-gold/40 transition-colors ${
-                    phone && !isValidPhone(phone)
-                      ? "border-red-500/60"
-                      : "border-gray-700 focus:border-brand-gold"
-                  }`}
-                />
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    id="phone"
+                    required
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="024XXXXXXX"
+                    className={`w-full pl-9 pr-4 py-3 rounded-xl bg-brand-dark border text-white text-sm outline-none focus:ring-2 transition-colors ${
+                      phone && !isValidPhone(phone)
+                        ? "border-red-500/60 focus:ring-red-500/30"
+                        : "border-gray-700 focus:border-brand-gold focus:ring-brand-gold/40"
+                    }`}
+                  />
+                </div>
                 {phone && !isValidPhone(phone) && (
                   <p className="text-[11px] text-red-400 mt-1">
-                    Enter a valid Ghanaian number (e.g. 024XXXXXXX)
+                    Enter a valid Ghanaian number
                   </p>
                 )}
               </div>
@@ -420,39 +407,42 @@ export default function AccountPage() {
               <button
                 type="submit"
                 disabled={authLoading || !isValidPhone(phone)}
-                className="w-full py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
+                className="w-full py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold disabled:opacity-50 inline-flex items-center justify-center gap-2 transition-colors"
               >
-                {authLoading ? "Sending code…" : "Send Login Code →"}
+                {authLoading ? "Sending…" : (
+                  <>
+                    Send Login Code
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </form>
           ) : (
             <form onSubmit={verifyOTP} className="space-y-4" aria-busy={authLoading}>
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs">
-                Code sent to <strong>{phone}</strong>
-                {IS_DEV && devCode && (
-                  <span className="block mt-1 text-brand-gold">
-                    DEV MODE: use{" "}
-                    <span className="font-mono">{devCode}</span>
-                  </span>
-                )}
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs inline-flex items-start gap-2 w-full">
+                <Smartphone className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <div>
+                  Code sent to <strong>{phone}</strong>
+                  {IS_DEV && devCode && (
+                    <span className="block mt-1 text-brand-gold">
+                      DEV: use <span className="font-mono">{devCode}</span>
+                    </span>
+                  )}
+                </div>
               </div>
 
               <OtpInput
                 value={code}
                 onChange={setCode}
                 onComplete={() => {
-                  // auto-submit when 6 digits entered
-                  if (code.length === 6) {
-                    // microtask so state flushes
-                    setTimeout(() => verifyOTP(), 0);
-                  }
+                  if (code.length === 6) setTimeout(() => verifyOTP(), 0);
                 }}
               />
 
               <button
                 type="submit"
                 disabled={authLoading || code.length < 4}
-                className="w-full py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
+                className="w-full py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold disabled:opacity-50 transition-colors"
               >
                 {authLoading ? "Verifying…" : "Verify & Sign In"}
               </button>
@@ -484,7 +474,7 @@ export default function AccountPage() {
 
           <Link
             href="/"
-            className="block text-center text-xs text-gray-400 hover:text-brand-gold"
+            className="block text-center text-xs text-gray-400 hover:text-brand-gold transition-colors"
           >
             ← Back to menu
           </Link>
@@ -495,7 +485,6 @@ export default function AccountPage() {
     );
   }
 
-  /* ---------- Dashboard ---------- */
   const points = safeNumber(profile?.loyalty_points);
   const pointsCash = points * POINT_VALUE;
   const totalOrders = safeNumber(profile?.total_orders);
@@ -519,6 +508,7 @@ export default function AccountPage() {
             role="alert"
             className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-3"
           >
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span className="flex-1">{error}</span>
             <button
               onClick={() => setReloadKey((k) => k + 1)}
@@ -529,10 +519,9 @@ export default function AccountPage() {
           </div>
         )}
 
-        {/* Greeting */}
         <div>
           <h1 className="font-heading text-3xl font-extrabold text-white">
-            Hi, {firstName} 👋
+            Hi, {firstName}
           </h1>
           <p className="text-gray-400 text-sm mt-1">
             Welcome back to Mr. Robert's Fries.
@@ -545,16 +534,15 @@ export default function AccountPage() {
 
           <div className="relative flex items-start justify-between gap-4">
             <div className="flex-1">
-              <div className="text-xs text-brand-gold uppercase tracking-widest font-bold">
-                🎁 Loyalty Balance
+              <div className="text-xs text-brand-gold uppercase tracking-widest font-bold inline-flex items-center gap-1.5">
+                <Gift className="w-3.5 h-3.5" />
+                Loyalty Balance
               </div>
               <div className="flex items-baseline gap-2 mt-3">
                 <span className="text-5xl font-black text-white leading-none">
                   {points}
                 </span>
-                <span className="text-brand-gold text-sm font-bold">
-                  points
-                </span>
+                <span className="text-brand-gold text-sm font-bold">points</span>
               </div>
               <div className="text-xs text-gray-400 mt-2">
                 Worth ≈{" "}
@@ -564,13 +552,12 @@ export default function AccountPage() {
                 off your next order
               </div>
 
-              {/* Progress to next milestone — always shown */}
               <div className="mt-4">
                 <div className="flex justify-between text-[10px] text-gray-500 mb-1">
                   <span>Next milestone ({NEXT_MILESTONE} pts)</span>
                   <span>
                     {points >= NEXT_MILESTONE
-                      ? "Unlocked! 🎉"
+                      ? "Unlocked!"
                       : `${NEXT_MILESTONE - points} to go`}
                   </span>
                 </div>
@@ -579,19 +566,18 @@ export default function AccountPage() {
                   aria-valuemin={0}
                   aria-valuemax={NEXT_MILESTONE}
                   aria-valuenow={Math.min(points, NEXT_MILESTONE)}
-                  aria-label="Progress to next reward milestone"
                   className="h-1.5 rounded-full bg-gray-800 overflow-hidden"
                 >
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-brand-amber to-brand-gold transition-all duration-500 motion-reduce:transition-none"
+                    className="h-full rounded-full bg-gradient-to-r from-brand-amber to-brand-gold transition-all duration-500"
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
               </div>
             </div>
 
-            <div className="text-5xl shrink-0" aria-hidden="true">
-              🎁
+            <div className="w-14 h-14 rounded-2xl bg-brand-gold/10 border border-brand-gold/20 flex items-center justify-center shrink-0">
+              <Gift className="w-7 h-7 text-brand-gold" />
             </div>
           </div>
 
@@ -606,13 +592,13 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {/* Referral card */}
         {profile?.referral_code && (
           <div className="bg-brand-card border border-gray-700 rounded-3xl p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <div className="text-xs text-gray-400 uppercase tracking-widest font-bold">
-                  🎉 Refer a Friend
+                <div className="text-xs text-gray-400 uppercase tracking-widest font-bold inline-flex items-center gap-1.5">
+                  <PartyPopper className="w-3.5 h-3.5" />
+                  Refer a Friend
                 </div>
                 <div className="text-lg font-bold text-white mt-2">
                   Give GH₵ 10, Get GH₵ 10
@@ -621,8 +607,8 @@ export default function AccountPage() {
                   Share your code. When they order, you both get rewarded.
                 </div>
               </div>
-              <div className="text-3xl shrink-0" aria-hidden="true">
-                🎉
+              <div className="w-12 h-12 rounded-2xl bg-brand-gold/10 border border-brand-gold/20 flex items-center justify-center shrink-0">
+                <PartyPopper className="w-6 h-6 text-brand-gold" />
               </div>
             </div>
 
@@ -635,35 +621,45 @@ export default function AccountPage() {
               </div>
               <button
                 onClick={copyReferral}
-                aria-live="polite"
-                className={`px-4 py-3 rounded-xl font-extrabold text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/50 ${
+                className={`px-4 py-3 rounded-xl font-extrabold text-xs inline-flex items-center gap-1.5 transition-colors ${
                   referralCopied
                     ? "bg-emerald-500 text-white"
                     : "bg-brand-gold text-brand-dark hover:bg-brand-amber"
                 }`}
               >
-                {referralCopied ? "✓ Copied" : "Copy"}
+                {referralCopied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    Copy
+                  </>
+                )}
               </button>
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 onClick={shareReferral}
-                className="py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600"
+                className="py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold text-sm inline-flex items-center justify-center gap-1.5 transition-colors"
               >
-                📤 Share
+                <Share2 className="w-4 h-4" />
+                Share
               </button>
               <button
                 onClick={shareViaWhatsApp}
-                className="py-3 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="py-3 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-sm inline-flex items-center justify-center gap-1.5 transition-colors"
               >
-                💬 WhatsApp
+                <MessageCircle className="w-4 h-4" />
+                WhatsApp
               </button>
             </div>
           </div>
         )}
 
-        {/* Quick links */}
         <div>
           <h2 className="font-heading text-lg font-bold text-white mb-3">
             Quick Links
@@ -671,38 +667,37 @@ export default function AccountPage() {
           <div className="grid grid-cols-2 gap-4">
             <QuickLink
               href="/account/orders"
-              emoji="📦"
+              Icon={Package}
               label="My Orders"
               sub="Track & reorder"
             />
             <QuickLink
               href="/account/addresses"
-              emoji="📍"
+              Icon={MapPin}
               label="Addresses"
               sub="Faster checkout"
             />
             <QuickLink
               href="/account/favorites"
-              emoji="❤️"
+              Icon={Heart}
               label="Favorites"
               sub="Your top picks"
             />
             <QuickLink
               href="/account/referrals"
-              emoji="🎁"
+              Icon={Gift}
               label="Referrals"
               sub="Track your invites"
             />
           </div>
         </div>
 
-        {/* Order CTA */}
         <Link
-          href="/#menu"
-          className="block bg-gradient-to-r from-brand-amber to-brand-crimson hover:from-brand-gold hover:to-brand-amber rounded-3xl p-6 text-center transition-colors group focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
+          href="/menu"
+          className="block bg-gradient-to-r from-brand-amber to-brand-crimson hover:from-brand-gold hover:to-brand-amber rounded-3xl p-6 text-center transition-colors group"
         >
-          <div className="text-3xl mb-2 group-hover:scale-110 transition-transform inline-block motion-reduce:transform-none">
-            🍟
+          <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+            <Utensils className="w-6 h-6 text-white" />
           </div>
           <div className="font-heading text-xl font-black text-white">
             Hungry? Order again
@@ -713,7 +708,6 @@ export default function AccountPage() {
         </Link>
       </main>
 
-      {/* Logout confirm */}
       {confirmLogout && (
         <div
           role="dialog"
@@ -723,28 +717,33 @@ export default function AccountPage() {
         >
           <div
             onClick={() => setConfirmLogout(false)}
-            className="absolute inset-0 bg-black/70"
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
           />
           <div className="relative bg-brand-card border border-gray-700 rounded-3xl max-w-sm w-full p-6 space-y-4">
-            <h3
-              id="logout-title"
-              className="font-heading text-lg font-bold text-white"
-            >
-              Sign out?
-            </h3>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+                <LogOut className="w-5 h-5 text-red-400" />
+              </div>
+              <h3
+                id="logout-title"
+                className="font-heading text-lg font-bold text-white"
+              >
+                Sign out?
+              </h3>
+            </div>
             <p className="text-xs text-gray-400">
               You'll need to verify your phone number again to sign back in.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmLogout(false)}
-                className="flex-1 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold text-sm"
+                className="flex-1 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold text-sm transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={doLogout}
-                className="flex-1 py-3 rounded-xl bg-brand-crimson hover:bg-red-700 text-white font-bold text-sm"
+                className="flex-1 py-3 rounded-xl bg-brand-crimson hover:bg-red-700 text-white font-bold text-sm transition-colors"
               >
                 Sign out
               </button>
@@ -757,10 +756,6 @@ export default function AccountPage() {
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  small components                                                   */
-/* ------------------------------------------------------------------ */
 
 function Stat({ label, value, accent }) {
   const color =
@@ -779,14 +774,14 @@ function Stat({ label, value, accent }) {
   );
 }
 
-function QuickLink({ href, emoji, label, sub }) {
+function QuickLink({ href, Icon, label, sub }) {
   return (
     <Link
       href={href}
-      className="p-5 rounded-2xl bg-brand-card border border-gray-700 hover:border-brand-gold hover:bg-brand-card/80 transition-all group focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
+      className="p-5 rounded-2xl bg-brand-card border border-gray-700 hover:border-brand-gold hover:bg-brand-card/80 transition-all group"
     >
-      <div className="text-2xl mb-2 group-hover:scale-110 transition-transform inline-block motion-reduce:transform-none">
-        {emoji}
+      <div className="w-10 h-10 rounded-xl bg-brand-gold/10 border border-brand-gold/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+        <Icon className="w-5 h-5 text-brand-gold" />
       </div>
       <div className="font-bold text-white">{label}</div>
       <div className="text-xs text-gray-400 mt-1">{sub}</div>
@@ -811,14 +806,13 @@ function Toast({ toast }) {
   );
 }
 
-/* 6-digit OTP input with paste, auto-advance, backspace nav */
 function OtpInput({ value, onChange, onComplete, length = 6 }) {
   const refs = useRef([]);
 
   const setAt = (i, char) => {
-    const chars = value.split("");
+    const chars = value.padEnd(length, " ").split("");
     chars[i] = char;
-    const next = chars.join("").slice(0, length);
+    const next = chars.join("").replace(/\s/g, "").slice(0, length);
     onChange(next);
   };
 
@@ -829,7 +823,6 @@ function OtpInput({ value, onChange, onComplete, length = 6 }) {
       return;
     }
     if (raw.length > 1) {
-      // paste-style input into a single box
       const chars = raw.split("").slice(0, length - i);
       const arr = value.padEnd(length, " ").split("");
       chars.forEach((c, j) => (arr[i + j] = c));
@@ -842,10 +835,7 @@ function OtpInput({ value, onChange, onComplete, length = 6 }) {
     }
     setAt(i, raw);
     if (i < length - 1) refs.current[i + 1]?.focus();
-    const nextVal = (value.slice(0, i) + raw + value.slice(i + 1)).slice(
-      0,
-      length
-    );
+    const nextVal = (value.slice(0, i) + raw + value.slice(i + 1)).slice(0, length);
     if (nextVal.length === length) onComplete?.(nextVal);
   };
 
@@ -881,17 +871,13 @@ function OtpInput({ value, onChange, onComplete, length = 6 }) {
 
   return (
     <div>
-      <label
-        htmlFor="otp-0"
-        className="block text-xs font-bold text-gray-300 mb-1"
-      >
+      <label className="block text-xs font-bold text-gray-300 mb-1">
         6-Digit Code
       </label>
-      <div className="flex gap-2 justify-between" role="group" aria-label="Verification code">
+      <div className="flex gap-2 justify-between" role="group">
         {Array.from({ length }).map((_, i) => (
           <input
             key={i}
-            id={`otp-${i}`}
             ref={(el) => (refs.current[i] = el)}
             value={value[i] || ""}
             onChange={(e) => handleChange(i, e)}
@@ -910,18 +896,11 @@ function OtpInput({ value, onChange, onComplete, length = 6 }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  header                                                             */
-/* ------------------------------------------------------------------ */
-
 export function AccountHeader({ profile, onLogout, activeTab, onSearch }) {
   return (
     <div className="border-b border-gray-800 bg-brand-card/50 backdrop-blur sticky top-0 z-40">
       <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <Link
-          href="/"
-          className="flex items-center gap-3 shrink-0 focus:outline-none focus:ring-2 focus:ring-brand-gold/40 rounded-xl"
-        >
+        <Link href="/" className="flex items-center gap-3 shrink-0">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-gold to-brand-crimson flex items-center justify-center text-brand-dark font-black">
             MR
           </div>
@@ -946,7 +925,7 @@ export function AccountHeader({ profile, onLogout, activeTab, onSearch }) {
             {onSearch && <SearchBar onClick={onSearch} compact />}
           </div>
           <Link
-            href="/"
+            href="/menu"
             className="hidden sm:block px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-200 transition-colors"
           >
             Menu
@@ -954,9 +933,10 @@ export function AccountHeader({ profile, onLogout, activeTab, onSearch }) {
           <button
             onClick={onLogout}
             aria-label="Sign out"
-            className="px-3 py-2 rounded-xl bg-brand-crimson hover:bg-red-700 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/50"
+            className="px-3 py-2 rounded-xl bg-brand-crimson hover:bg-red-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5"
           >
-            Logout
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </div>
@@ -969,7 +949,7 @@ export function AccountHeader({ profile, onLogout, activeTab, onSearch }) {
               key={t.href}
               href={t.href}
               aria-current={active ? "page" : undefined}
-              className={`px-4 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition-colors focus:outline-none ${
+              className={`px-4 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${
                 active
                   ? "border-brand-gold text-brand-gold"
                   : "border-transparent text-gray-400 hover:text-white"

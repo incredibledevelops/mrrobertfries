@@ -1,9 +1,38 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import {
+  ChefHat,
+  Bell,
+  BellOff,
+  Maximize2,
+  Minimize2,
+  RefreshCw,
+  LogOut,
+  Search,
+  X,
+  MapPin,
+  FileText,
+  Printer,
+  Play,
+  CheckCircle2,
+  Truck,
+  Clock,
+  AlertCircle,
+  Zap,
+  User,
+  UtensilsCrossed,
+  Wifi,
+  WifiOff,
+  Loader2,
+  ClipboardList,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 
-// Simple beep on new orders using Web Audio API
+/* ------------------------------------------------------------------ */
+/*  helpers                                                            */
+/* ------------------------------------------------------------------ */
+
 function playBeep() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -19,6 +48,265 @@ function playBeep() {
   } catch {}
 }
 
+function elapsedColor(minutes) {
+  if (minutes < 5) return "text-emerald-400 bg-emerald-500/10";
+  if (minutes < 10) return "text-brand-gold bg-brand-gold/10";
+  if (minutes < 20) return "text-brand-amber bg-brand-amber/10";
+  return "text-red-400 bg-red-500/10";
+}
+
+/* ------------------------------------------------------------------ */
+/*  UI primitives                                                      */
+/* ------------------------------------------------------------------ */
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="block text-xs font-bold text-gray-300 mb-1">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function KitchenCard({ order, column, onAdvance, onView }) {
+  const ageColor = elapsedColor(order.minutes_in_current_status);
+  const isOld = order.minutes_since_created > 20;
+
+  return (
+    <div
+      className={`p-3 rounded-xl bg-brand-dark border ${
+        isOld ? "border-red-500/60 animate-pulse" : "border-gray-700"
+      }`}
+    >
+      <div
+        onClick={onView}
+        className="cursor-pointer"
+        title="Click for details"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onView();
+          }
+        }}
+      >
+        <div className="flex justify-between items-start mb-2">
+          <div className="font-mono text-xs text-brand-gold font-bold">
+            {order.reference}
+          </div>
+          <div
+            className={`text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1 ${ageColor}`}
+          >
+            <Clock className="w-3 h-3" />
+            {order.minutes_in_current_status}m
+          </div>
+        </div>
+
+        <div className="text-sm text-white font-bold mb-1 flex items-center gap-1.5">
+          <User className="w-3.5 h-3.5 text-gray-500" />
+          {order.customer_name}
+        </div>
+        <div className="text-[11px] text-gray-400 mb-2 flex items-center gap-1">
+          <MapPin className="w-3 h-3" />
+          {order.delivery_zone_name}
+        </div>
+
+        <div className="space-y-0.5 text-xs border-t border-gray-800 pt-2 mb-2">
+          {order.items.slice(0, 3).map((item, i) => (
+            <div key={i} className="flex justify-between">
+              <span className="text-gray-200 truncate">
+                <span className="text-brand-gold font-bold">
+                  {item.quantity}×
+                </span>{" "}
+                {item.name}
+              </span>
+            </div>
+          ))}
+          {order.items.length > 3 && (
+            <div className="text-[10px] text-gray-500">
+              +{order.items.length - 3} more…
+            </div>
+          )}
+        </div>
+
+        {order.notes && (
+          <div className="text-[11px] text-amber-300 bg-amber-500/10 rounded p-2 mb-2 flex items-start gap-1.5">
+            <FileText className="w-3 h-3 shrink-0 mt-0.5" />
+            {order.notes}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        {column === "new" && (
+          <button
+            onClick={() => onAdvance(order.id, "preparing")}
+            className="flex-1 py-2 rounded-lg bg-brand-amber text-brand-dark font-extrabold text-xs flex items-center justify-center gap-1.5 transition-colors hover:bg-amber-500"
+          >
+            <Play className="w-3.5 h-3.5" />
+            Start Preparing
+          </button>
+        )}
+        {column === "preparing" && (
+          <button
+            onClick={() => onAdvance(order.id, "ready")}
+            className="flex-1 py-2 rounded-lg bg-brand-gold text-brand-dark font-extrabold text-xs flex items-center justify-center gap-1.5 transition-colors hover:bg-brand-amber"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Mark Ready
+          </button>
+        )}
+        {column === "ready" && (
+          <div className="flex-1 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" />
+            Waiting for rider
+          </div>
+        )}
+        {column === "out_for_delivery" && (
+          <div className="flex-1 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+            <Truck className="w-3.5 h-3.5" />
+            Out with rider
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OrderDetailModal({ order, onClose, onAdvance, onPrint }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        onClick={onClose}
+        className="absolute inset-0 bg-black/80"
+        aria-hidden="true"
+      />
+      <div className="relative bg-brand-card border border-gray-700 rounded-3xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <div className="font-mono text-brand-gold font-bold">
+              {order.reference}
+            </div>
+            <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {new Date(order.created_at).toLocaleString()}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="text-gray-400 hover:text-white p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-600"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="p-4 rounded-2xl bg-brand-dark border border-gray-800">
+            <div className="text-xs uppercase text-gray-500 font-bold mb-2 flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5" />
+              Customer
+            </div>
+            <div className="text-white font-bold">{order.customer_name}</div>
+            <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              {order.delivery_zone_name}
+            </div>
+            <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {order.minutes_since_created} min since created
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-brand-dark border border-gray-800">
+            <div className="text-xs uppercase text-gray-500 font-bold mb-2 flex items-center gap-1.5">
+              <UtensilsCrossed className="w-3.5 h-3.5" />
+              Items ({order.items.length})
+            </div>
+            <div className="space-y-2">
+              {order.items.map((i, idx) => (
+                <div
+                  key={idx}
+                  className="flex justify-between text-sm text-gray-200"
+                >
+                  <span>
+                    <span className="text-brand-gold font-bold">
+                      {i.quantity}×
+                    </span>{" "}
+                    {i.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {order.notes && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+              <div className="text-xs uppercase text-amber-400 font-bold mb-1 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5" />
+                Notes
+              </div>
+              <div className="text-sm text-amber-200">{order.notes}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 mt-6">
+          <button
+            onClick={onPrint}
+            className="flex-1 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold text-sm transition-colors flex items-center justify-center gap-2"
+          >
+            <Printer className="w-4 h-4" />
+            Print Ticket
+          </button>
+          {order.status === "paid" && (
+            <button
+              onClick={() => onAdvance("preparing")}
+              className="flex-1 py-3 rounded-xl bg-brand-amber hover:bg-amber-500 text-brand-dark font-extrabold text-sm transition-colors flex items-center justify-center gap-2"
+            >
+              <Play className="w-4 h-4" />
+              Start Preparing
+            </button>
+          )}
+          {order.status === "preparing" && (
+            <button
+              onClick={() => onAdvance("ready")}
+              className="flex-1 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Mark Ready
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  page                                                               */
+/* ------------------------------------------------------------------ */
+
 export default function KitchenDisplay() {
   const [token, setToken] = useState(null);
   const [email, setEmail] = useState("");
@@ -32,13 +320,11 @@ export default function KitchenDisplay() {
   const [detailOrder, setDetailOrder] = useState(null);
   const [soundOn, setSoundOn] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
-  const [tick, setTick] = useState(0);
 
   const wsRef = useRef(null);
   const prevNewCountRef = useRef(0);
   const knownRefsRef = useRef(new Set());
 
-  // Load persisted token
   useEffect(() => {
     const t = localStorage.getItem("mrf_kitchen_token");
     const savedSound = localStorage.getItem("mrf_kitchen_sound");
@@ -49,47 +335,51 @@ export default function KitchenDisplay() {
     }
   }, []);
 
-  // Tick every 5s to refresh elapsed timers
   useEffect(() => {
-    const t = setInterval(() => setTick((x) => x + 1), 5000);
+    const t = setInterval(() => {
+      // Tick to refresh elapsed timers via re-render
+      setFeed((f) => (f ? { ...f } : f));
+    }, 30000);
     return () => clearInterval(t);
   }, []);
 
-  const fetchFeed = useCallback(async (t) => {
-    try {
-      const res = await fetch(`${API_URL}/api/v1/kitchen/feed`, {
-        headers: { Authorization: `Bearer ${t}` },
-      });
-      if (res.status === 401) {
-        localStorage.removeItem("mrf_kitchen_token");
-        setToken(null);
-        setError("Session expired — please log in again");
-        return;
-      }
-      if (!res.ok) throw new Error("Could not load kitchen feed");
-      const data = await res.json();
-      setFeed(data);
-      setLastUpdated(new Date());
-
-      // Detect new orders → beep
-      const newOrders = data.new || [];
-      const currentRefs = new Set(newOrders.map((o) => o.reference));
-      let hasNew = false;
-      for (const ref of currentRefs) {
-        if (!knownRefsRef.current.has(ref)) {
-          hasNew = true;
+  const fetchFeed = useCallback(
+    async (t) => {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/kitchen/feed`, {
+          headers: { Authorization: `Bearer ${t}` },
+        });
+        if (res.status === 401) {
+          localStorage.removeItem("mrf_kitchen_token");
+          setToken(null);
+          setError("Session expired — please log in again");
+          return;
         }
-      }
-      knownRefsRef.current = currentRefs;
+        if (!res.ok) throw new Error("Could not load kitchen feed");
+        const data = await res.json();
+        setFeed(data);
+        setLastUpdated(new Date());
 
-      if (hasNew && soundOn && prevNewCountRef.current >= 0) {
-        playBeep();
+        const newOrders = data.new || [];
+        const currentRefs = new Set(newOrders.map((o) => o.reference));
+        let hasNew = false;
+        for (const ref of currentRefs) {
+          if (!knownRefsRef.current.has(ref)) {
+            hasNew = true;
+          }
+        }
+        knownRefsRef.current = currentRefs;
+
+        if (hasNew && soundOn && prevNewCountRef.current >= 0) {
+          playBeep();
+        }
+        prevNewCountRef.current = newOrders.length;
+      } catch (e) {
+        setError(e.message);
       }
-      prevNewCountRef.current = newOrders.length;
-    } catch (e) {
-      setError(e.message);
-    }
-  }, [soundOn]);
+    },
+    [soundOn]
+  );
 
   // WebSocket
   useEffect(() => {
@@ -211,14 +501,17 @@ export default function KitchenDisplay() {
 
   async function advance(orderId, status) {
     try {
-      const res = await fetch(`${API_URL}/api/v1/kitchen/orders/${orderId}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status }),
-      });
+      const res = await fetch(
+        `${API_URL}/api/v1/kitchen/orders/${orderId}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status }),
+        }
+      );
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.detail || "Failed to advance");
@@ -226,23 +519,27 @@ export default function KitchenDisplay() {
       await fetchFeed(token);
       setDetailOrder(null);
     } catch (e) {
-      alert(e.message);
+      setError(e.message);
     }
   }
 
   async function markAllNewAsPreparing() {
     if (!feed?.new?.length) return;
-    if (!confirm(`Move all ${feed.new.length} new orders to "Preparing"?`)) return;
+    if (!confirm(`Move all ${feed.new.length} new orders to "Preparing"?`))
+      return;
     for (const order of feed.new) {
       try {
-        await fetch(`${API_URL}/api/v1/kitchen/orders/${order.id}/status`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ status: "preparing" }),
-        });
+        await fetch(
+          `${API_URL}/api/v1/kitchen/orders/${order.id}/status`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ status: "preparing" }),
+          }
+        );
       } catch {}
     }
     await fetchFeed(token);
@@ -273,7 +570,7 @@ export default function KitchenDisplay() {
           </style>
         </head>
         <body>
-          <h1>🍟 MR. ROBERT'S FRIES</h1>
+          <h1>MR. ROBERT'S FRIES</h1>
           <div class="ref">${order.reference}</div>
           <hr />
           <table class="items">${items}</table>
@@ -299,7 +596,6 @@ export default function KitchenDisplay() {
     win.document.close();
   }
 
-  // Filter orders
   const filteredFeed = useMemo(() => {
     if (!feed) return null;
     if (!search.trim()) return feed;
@@ -319,7 +615,7 @@ export default function KitchenDisplay() {
     };
   }, [feed, search]);
 
-  // Login screen
+  /* ---------- Login screen ---------- */
   if (!token) {
     return (
       <div className="min-h-screen bg-brand-dark flex items-center justify-center p-4">
@@ -328,8 +624,8 @@ export default function KitchenDisplay() {
           className="w-full max-w-sm bg-brand-card border border-gray-700 rounded-3xl p-8 space-y-4"
         >
           <div className="text-center">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-gold to-brand-crimson flex items-center justify-center text-brand-dark font-black text-2xl mx-auto">
-              🍳
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-gold to-brand-crimson flex items-center justify-center mx-auto">
+              <ChefHat className="w-7 h-7 text-brand-dark" />
             </div>
             <h1 className="font-heading text-2xl font-extrabold text-white mt-4">
               Kitchen Display
@@ -340,7 +636,8 @@ export default function KitchenDisplay() {
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               {error}
             </div>
           )}
@@ -352,7 +649,7 @@ export default function KitchenDisplay() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="kitchen@mrfries.com"
-              className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm"
+              className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/40 outline-none"
             />
           </Field>
 
@@ -363,15 +660,22 @@ export default function KitchenDisplay() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm"
+              className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/40 outline-none"
             />
           </Field>
 
           <button
             disabled={loading}
-            className="w-full py-3 rounded-xl bg-brand-gold text-brand-dark font-extrabold disabled:opacity-50"
+            className="w-full py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
           >
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
           </button>
         </form>
       </div>
@@ -379,10 +683,30 @@ export default function KitchenDisplay() {
   }
 
   const columns = [
-    { key: "new", title: "New Orders", accent: "border-brand-crimson" },
-    { key: "preparing", title: "Preparing", accent: "border-brand-amber" },
-    { key: "ready", title: "Ready for Pickup", accent: "border-brand-gold" },
-    { key: "out_for_delivery", title: "On the Way", accent: "border-emerald-500" },
+    {
+      key: "new",
+      title: "New Orders",
+      accent: "border-brand-crimson",
+      Icon: Bell,
+    },
+    {
+      key: "preparing",
+      title: "Preparing",
+      accent: "border-brand-amber",
+      Icon: Play,
+    },
+    {
+      key: "ready",
+      title: "Ready for Pickup",
+      accent: "border-brand-gold",
+      Icon: CheckCircle2,
+    },
+    {
+      key: "out_for_delivery",
+      title: "On the Way",
+      accent: "border-emerald-500",
+      Icon: Truck,
+    },
   ];
 
   return (
@@ -390,8 +714,8 @@ export default function KitchenDisplay() {
       <header className="border-b border-gray-800 bg-brand-card/50 backdrop-blur sticky top-0 z-10">
         <div className="px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-gold to-brand-crimson flex items-center justify-center text-brand-dark font-black">
-              🍳
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-gold to-brand-crimson flex items-center justify-center">
+              <ChefHat className="w-5 h-5 text-brand-dark" />
             </div>
             <div>
               <div className="font-heading text-lg font-black text-white leading-none">
@@ -399,19 +723,25 @@ export default function KitchenDisplay() {
               </div>
               <div className="text-[10px] text-gray-400 flex items-center gap-2">
                 <span
-                  className={`inline-block w-2 h-2 rounded-full ${
+                  className={`inline-flex items-center gap-1 ${
                     wsStatus === "connected"
-                      ? "bg-emerald-400"
+                      ? "text-emerald-400"
                       : wsStatus === "connecting"
-                      ? "bg-amber-400"
-                      : "bg-red-500"
+                      ? "text-amber-400"
+                      : "text-red-400"
                   }`}
-                />
-                {wsStatus === "connected"
-                  ? "Live"
-                  : wsStatus === "connecting"
-                  ? "Connecting…"
-                  : "Polling"}{" "}
+                >
+                  {wsStatus === "connected" ? (
+                    <Wifi className="w-3 h-3" />
+                  ) : (
+                    <WifiOff className="w-3 h-3" />
+                  )}
+                  {wsStatus === "connected"
+                    ? "Live"
+                    : wsStatus === "connecting"
+                    ? "Connecting…"
+                    : "Polling"}
+                </span>
                 ·{" "}
                 {lastUpdated
                   ? `Updated ${lastUpdated.toLocaleTimeString()}`
@@ -421,97 +751,129 @@ export default function KitchenDisplay() {
           </div>
 
           <div className="flex items-center gap-2">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search ref, name, item…"
-              className="px-3 py-2 rounded-xl bg-brand-dark border border-gray-700 text-white text-xs outline-none focus:border-brand-gold w-40 sm:w-56"
-            />
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search ref, name, item…"
+                className="pl-8 pr-3 py-2 rounded-xl bg-brand-dark border border-gray-700 text-white text-xs outline-none focus:border-brand-gold w-40 sm:w-56"
+              />
+            </div>
             <button
               onClick={toggleSound}
               title={soundOn ? "Sound on" : "Sound off"}
-              className="px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold"
+              aria-label={soundOn ? "Mute sound" : "Unmute sound"}
+              className="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600"
             >
-              {soundOn ? "🔔" : "🔕"}
+              {soundOn ? (
+                <Bell className="w-4 h-4" />
+              ) : (
+                <BellOff className="w-4 h-4" />
+              )}
             </button>
             <button
               onClick={toggleFullscreen}
               title="Toggle fullscreen"
-              className="hidden sm:block px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold"
+              aria-label="Toggle fullscreen"
+              className="hidden sm:flex p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600"
             >
-              {fullscreen ? "⛗" : "⛶"}
+              {fullscreen ? (
+                <Minimize2 className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
             </button>
             <button
               onClick={() => fetchFeed(token)}
-              className="px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold"
+              aria-label="Refresh"
+              title="Refresh now"
+              className="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600"
             >
-              ↻
+              <RefreshCw className="w-4 h-4" />
             </button>
             <button
               onClick={logout}
-              className="px-3 py-2 rounded-xl bg-brand-crimson hover:bg-red-700 text-white text-xs font-bold"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-crimson hover:bg-red-700 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/50"
             >
+              <LogOut className="w-3.5 h-3.5" />
               Logout
             </button>
           </div>
         </div>
 
-        {/* Bulk actions */}
         {feed?.new?.length > 0 && (
           <div className="px-4 sm:px-6 pb-3 flex items-center gap-3">
             <button
               onClick={markAllNewAsPreparing}
-              className="px-4 py-2 rounded-xl bg-brand-amber text-brand-dark text-xs font-extrabold"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-amber hover:bg-amber-500 text-brand-dark text-xs font-extrabold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-amber/60"
             >
-              ⚡ Start all {feed.new.length} new orders
+              <Zap className="w-3.5 h-3.5" />
+              Start all {feed.new.length} new orders
             </button>
           </div>
         )}
       </header>
 
       {error && (
-        <div className="mx-4 sm:mx-6 mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+        <div
+          role="alert"
+          className="mx-4 sm:mx-6 mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           {error}
         </div>
       )}
 
       <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {columns.map((col) => (
-          <div key={col.key} className="bg-brand-card/40 rounded-2xl border border-gray-800 p-4">
-            <div className={`border-t-4 ${col.accent} -mx-4 -mt-4 mb-4 rounded-t-2xl`} />
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="font-heading text-white font-extrabold">
-                {col.title}
-              </h2>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-lg bg-gray-800 text-white">
-                {filteredFeed?.[col.key]?.length || 0}
-              </span>
-            </div>
+        {columns.map((col) => {
+          const Icon = col.Icon;
+          return (
+            <div
+              key={col.key}
+              className="bg-brand-card/40 rounded-2xl border border-gray-800 p-4"
+            >
+              <div
+                className={`border-t-4 ${col.accent} -mx-4 -mt-4 mb-4 rounded-t-2xl`}
+              />
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="font-heading text-white font-extrabold flex items-center gap-2">
+                  <Icon className="w-4 h-4" />
+                  {col.title}
+                </h2>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-lg bg-gray-800 text-white">
+                  {filteredFeed?.[col.key]?.length || 0}
+                </span>
+              </div>
 
-            <div className="space-y-3">
-              {!filteredFeed ? (
-                <p className="text-xs text-gray-500">Loading…</p>
-              ) : filteredFeed[col.key].length === 0 ? (
-                <p className="text-xs text-gray-500">
-                  {search ? "No matches" : "No orders"}
-                </p>
-              ) : (
-                filteredFeed[col.key].map((order) => (
-                  <KitchenCard
-                    key={order.id}
-                    order={order}
-                    column={col.key}
-                    onAdvance={advance}
-                    onView={() => setDetailOrder(order)}
-                  />
-                ))
-              )}
+              <div className="space-y-3">
+                {!filteredFeed ? (
+                  <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Loading…
+                  </p>
+                ) : filteredFeed[col.key].length === 0 ? (
+                  <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                    <ClipboardList className="w-3.5 h-3.5" />
+                    {search ? "No matches" : "No orders"}
+                  </p>
+                ) : (
+                  filteredFeed[col.key].map((order) => (
+                    <KitchenCard
+                      key={order.id}
+                      order={order}
+                      column={col.key}
+                      onAdvance={advance}
+                      onView={() => setDetailOrder(order)}
+                    />
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Detail modal */}
       {detailOrder && (
         <OrderDetailModal
           order={detailOrder}
@@ -520,205 +882,6 @@ export default function KitchenDisplay() {
           onPrint={() => printOrder(detailOrder)}
         />
       )}
-    </div>
-  );
-}
-
-function elapsedColor(minutes) {
-  if (minutes < 5) return "text-emerald-400 bg-emerald-500/10";
-  if (minutes < 10) return "text-brand-gold bg-brand-gold/10";
-  if (minutes < 20) return "text-brand-amber bg-brand-amber/10";
-  return "text-red-400 bg-red-500/10";
-}
-
-function KitchenCard({ order, column, onAdvance, onView }) {
-  const ageColor = elapsedColor(order.minutes_in_current_status);
-  const isOld = order.minutes_since_created > 20;
-
-  return (
-    <div
-      className={`p-3 rounded-xl bg-brand-dark border ${
-        isOld ? "border-red-500/60 animate-pulse" : "border-gray-700"
-      }`}
-    >
-      <div
-        onClick={onView}
-        className="cursor-pointer"
-        title="Click for details"
-      >
-        <div className="flex justify-between items-start mb-2">
-          <div className="font-mono text-xs text-brand-gold font-bold">
-            {order.reference}
-          </div>
-          <div className={`text-[10px] px-2 py-0.5 rounded font-bold ${ageColor}`}>
-            {order.minutes_in_current_status}m
-          </div>
-        </div>
-
-        <div className="text-sm text-white font-bold mb-1">
-          {order.customer_name}
-        </div>
-        <div className="text-[11px] text-gray-400 mb-2">
-          📍 {order.delivery_zone_name}
-        </div>
-
-        <div className="space-y-0.5 text-xs border-t border-gray-800 pt-2 mb-2">
-          {order.items.slice(0, 3).map((item, i) => (
-            <div key={i} className="flex justify-between">
-              <span className="text-gray-200 truncate">
-                <span className="text-brand-gold font-bold">
-                  {item.quantity}×
-                </span>{" "}
-                {item.name}
-              </span>
-            </div>
-          ))}
-          {order.items.length > 3 && (
-            <div className="text-[10px] text-gray-500">
-              +{order.items.length - 3} more…
-            </div>
-          )}
-        </div>
-
-        {order.notes && (
-          <div className="text-[11px] text-amber-300 bg-amber-500/10 rounded p-2 mb-2">
-            📝 {order.notes}
-          </div>
-        )}
-      </div>
-
-      <div className="flex gap-2">
-        {column === "new" && (
-          <button
-            onClick={() => onAdvance(order.id, "preparing")}
-            className="flex-1 py-2 rounded-lg bg-brand-amber text-brand-dark font-extrabold text-xs"
-          >
-            Start Preparing
-          </button>
-        )}
-        {column === "preparing" && (
-          <button
-            onClick={() => onAdvance(order.id, "ready")}
-            className="flex-1 py-2 rounded-lg bg-brand-gold text-brand-dark font-extrabold text-xs"
-          >
-            Mark Ready
-          </button>
-        )}
-        {column === "ready" && (
-          <div className="flex-1 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-bold text-center">
-            Waiting for rider
-          </div>
-        )}
-        {column === "out_for_delivery" && (
-          <div className="flex-1 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-bold text-center">
-            Out with rider
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function OrderDetailModal({ order, onClose, onAdvance, onPrint }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div onClick={onClose} className="absolute inset-0 bg-black/80" />
-      <div className="relative bg-brand-card border border-gray-700 rounded-3xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <div className="font-mono text-brand-gold font-bold">
-              {order.reference}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {new Date(order.created_at).toLocaleString()}
-            </div>
-          </div>
-          <button onClick={onClose} className="text-gray-400 text-xl">
-            ✕
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          <div className="p-4 rounded-2xl bg-brand-dark border border-gray-800">
-            <div className="text-xs uppercase text-gray-500 font-bold mb-2">
-              Customer
-            </div>
-            <div className="text-white font-bold">{order.customer_name}</div>
-            <div className="text-xs text-gray-400 mt-1">
-              📍 {order.delivery_zone_name}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">
-              🕐 {order.minutes_since_created} min since created
-            </div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-brand-dark border border-gray-800">
-            <div className="text-xs uppercase text-gray-500 font-bold mb-2">
-              Items ({order.items.length})
-            </div>
-            <div className="space-y-2">
-              {order.items.map((i, idx) => (
-                <div
-                  key={idx}
-                  className="flex justify-between text-sm text-gray-200"
-                >
-                  <span>
-                    <span className="text-brand-gold font-bold">
-                      {i.quantity}×
-                    </span>{" "}
-                    {i.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {order.notes && (
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
-              <div className="text-xs uppercase text-amber-400 font-bold mb-1">
-                Notes
-              </div>
-              <div className="text-sm text-amber-200">{order.notes}</div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-2 mt-6">
-          <button
-            onClick={onPrint}
-            className="flex-1 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold text-sm"
-          >
-            🖨 Print Ticket
-          </button>
-          {order.status === "paid" && (
-            <button
-              onClick={() => onAdvance("preparing")}
-              className="flex-1 py-3 rounded-xl bg-brand-amber text-brand-dark font-extrabold text-sm"
-            >
-              Start Preparing
-            </button>
-          )}
-          {order.status === "preparing" && (
-            <button
-              onClick={() => onAdvance("ready")}
-              className="flex-1 py-3 rounded-xl bg-brand-gold text-brand-dark font-extrabold text-sm"
-            >
-              Mark Ready
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <div>
-      <label className="block text-xs font-bold text-gray-300 mb-1">
-        {label}
-      </label>
-      {children}
     </div>
   );
 }

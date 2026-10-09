@@ -50,18 +50,21 @@ async def list_with_zone_counts() -> list[dict]:
     Returns each branch with:
       - zone_count (zones assigned to this branch only)
       - shared_zone_count (zones with no branch_id, visible everywhere)
+
+    Single pass over the zones collection (one query), then a dict lookup
+    per branch — no N+1.
     """
     branches = await list_branches(active_only=False)
-    orphans = await zone_crud.list_orphans()
+    counts = await zone_crud.count_for_branches()
+    shared = counts.get("shared", 0)
 
     out = []
     for b in branches:
-        count = await zone_crud.count_for_branch(str(b.id))
         out.append(
             {
                 "branch": b,
-                "zone_count": count,
-                "shared_zone_count": len(orphans),
+                "zone_count": counts.get(str(b.id), 0),
+                "shared_zone_count": shared,
             }
         )
     return out

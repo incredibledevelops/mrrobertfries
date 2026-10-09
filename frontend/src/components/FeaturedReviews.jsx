@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Quote, ChevronLeft, ChevronRight, Star } from "lucide-react";
 import { API_URL } from "@/lib/api";
 import StarRating from "@/components/StarRating";
 import { SkeletonBlock, SkeletonLine } from "@/components/Skeleton";
@@ -58,7 +59,6 @@ export default function FeaturedReviews() {
     ).matches;
   }, []);
 
-  /* ---------- fetch ---------- */
   useEffect(() => {
     const controller = new AbortController();
     (async () => {
@@ -79,12 +79,10 @@ export default function FeaturedReviews() {
     return () => controller.abort();
   }, []);
 
-  /* ---------- clamp current when list changes ---------- */
   useEffect(() => {
     if (current >= reviews.length) setCurrent(0);
   }, [reviews.length, current]);
 
-  /* ---------- auto-advance (paused on hover/focus/tab-hidden) ---------- */
   useEffect(() => {
     if (reviews.length <= 1) return;
     if (paused) return;
@@ -106,7 +104,6 @@ export default function FeaturedReviews() {
     };
   }, [reviews.length, paused]);
 
-  /* ---------- keyboard nav on the wrapper ---------- */
   const onKeyDown = useCallback(
     (e) => {
       if (reviews.length <= 1) return;
@@ -121,7 +118,6 @@ export default function FeaturedReviews() {
     [reviews.length]
   );
 
-  /* ---------- swipe ---------- */
   const onTouchStart = useCallback((e) => {
     touchStartX.current = e.touches[0].clientX;
   }, []);
@@ -157,7 +153,7 @@ export default function FeaturedReviews() {
         </div>
 
         <div
-          className="bg-brand-card rounded-3xl border border-gray-700 p-8 sm:p-12 relative focus:outline-none focus:ring-2 focus:ring-brand-gold/40"
+          className="bg-brand-card rounded-3xl border border-gray-700 p-8 sm:p-12 relative focus:outline-none focus:ring-2 focus:ring-brand-gold/40 overflow-hidden"
           tabIndex={0}
           role="region"
           aria-roledescription="carousel"
@@ -170,12 +166,12 @@ export default function FeaturedReviews() {
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
-          <div
-            className="text-6xl text-brand-gold/30 absolute top-4 left-6 font-serif select-none"
+          {/* Decorative quote */}
+          <Quote
+            className="w-16 h-16 text-brand-gold/20 absolute top-6 left-6 select-none"
+            strokeWidth={1.5}
             aria-hidden="true"
-          >
-            "
-          </div>
+          />
 
           <div
             className="relative z-10 text-center"
@@ -219,24 +215,21 @@ export default function FeaturedReviews() {
 
           {reviews.length > 1 && (
             <>
-              {/* Prev / Next arrows (hidden on small, we have swipe) */}
               <button
                 onClick={() =>
                   setCurrent((i) => (i - 1 + reviews.length) % reviews.length)
                 }
                 aria-label="Previous review"
-                className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 items-center justify-center rounded-full bg-brand-dark/70 border border-gray-700 text-gray-300 hover:text-brand-gold hover:border-brand-gold/60 transition-colors"
+                className="hidden sm:flex absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 items-center justify-center rounded-full bg-brand-dark/80 border border-gray-700 text-gray-300 hover:text-brand-gold hover:border-brand-gold/60 hover:scale-105 transition-all"
               >
-                ‹
+                <ChevronLeft className="w-5 h-5" />
               </button>
               <button
-                onClick={() =>
-                  setCurrent((i) => (i + 1) % reviews.length)
-                }
+                onClick={() => setCurrent((i) => (i + 1) % reviews.length)}
                 aria-label="Next review"
-                className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 items-center justify-center rounded-full bg-brand-dark/70 border border-gray-700 text-gray-300 hover:text-brand-gold hover:border-brand-gold/60 transition-colors"
+                className="hidden sm:flex absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 items-center justify-center rounded-full bg-brand-dark/80 border border-gray-700 text-gray-300 hover:text-brand-gold hover:border-brand-gold/60 hover:scale-105 transition-all"
               >
-                ›
+                <ChevronRight className="w-5 h-5" />
               </button>
 
               <div className="flex justify-center gap-2 mt-8">

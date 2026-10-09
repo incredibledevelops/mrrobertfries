@@ -2,12 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Star,
+  Search,
+  X,
+  AlertCircle,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  MessageSquare,
+  ThumbsUp,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { SkeletonBlock, SkeletonLine } from "@/components/Skeleton";
-
-/* ------------------------------------------------------------------ */
-/*  constants                                                          */
-/* ------------------------------------------------------------------ */
 
 const TOKEN_KEY = "mrf_token";
 const TOKEN_ISSUED_AT_KEY = "mrf_token_issued_at";
@@ -18,12 +29,8 @@ const FILTERS = [
   { key: "published", label: "Published" },
   { key: "hidden", label: "Hidden" },
   { key: "featured", label: "Featured" },
-  { key: "low", label: "Low ratings" }, // 1-2 stars
+  { key: "low", label: "Low ratings" },
 ];
-
-/* ------------------------------------------------------------------ */
-/*  helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 function getAdminToken() {
   if (typeof window === "undefined") return null;
@@ -98,21 +105,18 @@ function formatDateTime(iso) {
   });
 }
 
-/* ------------------------------------------------------------------ */
-/*  UI primitives                                                      */
-/* ------------------------------------------------------------------ */
-
 function Toast({ toast }) {
   if (!toast) return null;
-  const styles =
-    toast.type === "error"
-      ? "bg-red-950/90 border-red-700 text-red-200"
-      : "bg-emerald-950/90 border-emerald-700 text-emerald-200";
+  const isError = toast.type === "error";
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${styles}`}
+      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${
+        isError
+          ? "bg-red-950/90 border-red-700 text-red-200"
+          : "bg-emerald-950/90 border-emerald-700 text-emerald-200"
+      }`}
     >
       {toast.message}
     </div>
@@ -186,21 +190,20 @@ function Modal({ children, onClose, labelledBy, disableClose = false }) {
 
 function StarRating({ rating, size = "md" }) {
   const clamped = clampRating(rating);
-  const sizeClass = size === "lg" ? "text-xl" : "text-base";
+  const sizeClass = size === "lg" ? "w-5 h-5" : "w-4 h-4";
   return (
     <span
-      className={`inline-flex items-center gap-0.5 ${sizeClass}`}
+      className="inline-flex items-center gap-0.5"
       role="img"
       aria-label={`${clamped} out of 5 stars`}
     >
       {[1, 2, 3, 4, 5].map((n) => (
-        <span
+        <Star
           key={n}
-          aria-hidden="true"
-          className={n <= clamped ? "text-brand-gold" : "text-gray-700"}
-        >
-          ★
-        </span>
+          className={`${sizeClass} ${
+            n <= clamped ? "fill-brand-gold text-brand-gold" : "text-gray-700"
+          }`}
+        />
       ))}
     </span>
   );
@@ -234,20 +237,17 @@ function ReviewsSkeleton({ count = 5 }) {
   );
 }
 
-function SummaryCard({ label, value, color }) {
+function SummaryCard({ label, value, color, Icon }) {
   return (
     <div className="bg-brand-card border border-gray-700 rounded-2xl p-5">
-      <div className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">
+      <div className="flex items-center gap-2 text-[10px] text-gray-400 uppercase tracking-wider font-bold">
+        {Icon && <Icon className="w-3.5 h-3.5" />}
         {label}
       </div>
       <div className={`text-3xl font-black mt-1 ${color}`}>{value}</div>
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  page                                                               */
-/* ------------------------------------------------------------------ */
 
 export default function AdminReviews() {
   const router = useRouter();
@@ -269,7 +269,7 @@ export default function AdminReviews() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  const [lightbox, setLightbox] = useState(null); // { photos: [], index: n }
+  const [lightbox, setLightbox] = useState(null);
 
   const [busyIds, setBusyIds] = useState(() => new Set());
   const [toast, setToast] = useState(null);
@@ -285,7 +285,6 @@ export default function AdminReviews() {
     []
   );
 
-  /* ---------- auth ---------- */
   useEffect(() => {
     const t = getAdminToken();
     if (!t) {
@@ -304,7 +303,6 @@ export default function AdminReviews() {
     return () => window.removeEventListener("storage", onStorage);
   }, [router]);
 
-  /* ---------- authed fetch ---------- */
   const authFetch = useCallback(
     async (url, init = {}) => {
       const headers = {
@@ -322,7 +320,6 @@ export default function AdminReviews() {
     [token, router]
   );
 
-  /* ---------- load ---------- */
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -355,7 +352,6 @@ export default function AdminReviews() {
     load();
   }, [token, reloadKey, load]);
 
-  /* ---------- toggle publish / feature (optimistic) ---------- */
   const toggleField = useCallback(
     async (review, field) => {
       if (busyIds.has(review.id)) return;
@@ -406,7 +402,6 @@ export default function AdminReviews() {
     [reviews, busyIds, authFetch, showToast]
   );
 
-  /* ---------- delete ---------- */
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     const review = deleteTarget;
@@ -435,7 +430,6 @@ export default function AdminReviews() {
     }
   }, [deleteTarget, authFetch, showToast]);
 
-  /* ---------- derived ---------- */
   const counts = useMemo(() => {
     const c = {
       all: reviews.length,
@@ -471,7 +465,6 @@ export default function AdminReviews() {
       );
     }
 
-    // Sort by created_at desc
     return [...list].sort((a, b) => {
       const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
       const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -494,7 +487,6 @@ export default function AdminReviews() {
     );
   }, [summaryData]);
 
-  /* ---------- render guard ---------- */
   if (!authChecked || !token) {
     return (
       <div>
@@ -506,7 +498,6 @@ export default function AdminReviews() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="font-heading text-3xl font-extrabold text-white">
@@ -518,30 +509,27 @@ export default function AdminReviews() {
         </div>
       </div>
 
-      {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <SummaryCard
           label="Average Rating"
-          value={
-            loading ? "—" : `${summaryData.average.toFixed(1)} ★`
-          }
+          value={loading ? "—" : `${summaryData.average.toFixed(1)}`}
           color="text-brand-gold"
+          Icon={Star}
         />
         <SummaryCard
           label="Total Reviews"
           value={loading ? "—" : summaryData.total}
           color="text-white"
+          Icon={MessageSquare}
         />
         <SummaryCard
           label="5-Star Reviews"
-          value={
-            loading ? "—" : safeNumber(summaryData.breakdown["5"])
-          }
+          value={loading ? "—" : safeNumber(summaryData.breakdown["5"])}
           color="text-emerald-400"
+          Icon={ThumbsUp}
         />
       </div>
 
-      {/* Rating breakdown (collapsible) */}
       {!loading && summaryData.total > 0 && (
         <div className="mb-6">
           <button
@@ -549,7 +537,12 @@ export default function AdminReviews() {
             aria-expanded={showBreakdown}
             className="text-xs text-brand-gold hover:underline font-bold flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-brand-gold/40 rounded px-1"
           >
-            {showBreakdown ? "▼" : "▶"} Rating breakdown
+            {showBreakdown ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5" />
+            )}
+            Rating breakdown
           </button>
           {showBreakdown && (
             <div className="mt-3 bg-brand-card border border-gray-700 rounded-2xl p-5 space-y-2">
@@ -559,8 +552,8 @@ export default function AdminReviews() {
                   breakdownTotal > 0 ? (count / breakdownTotal) * 100 : 0;
                 return (
                   <div key={n} className="flex items-center gap-3 text-xs">
-                    <span className="text-gray-400 w-12">
-                      {n} ★
+                    <span className="text-gray-400 w-12 flex items-center gap-1">
+                      {n} <Star className="w-3 h-3 fill-brand-gold text-brand-gold" />
                     </span>
                     <div className="flex-1 h-2 rounded-full bg-gray-800 overflow-hidden">
                       <div
@@ -579,13 +572,10 @@ export default function AdminReviews() {
         </div>
       )}
 
-      {/* Search + filters */}
       {!loading && reviews.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-6">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
-              🔍
-            </span>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -629,30 +619,28 @@ export default function AdminReviews() {
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div
           role="alert"
           className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-3"
         >
+          <AlertCircle className="w-5 h-5 shrink-0" />
           <span className="flex-1">{error}</span>
           <button
             onClick={() => setReloadKey((k) => k + 1)}
-            className="text-xs font-bold underline hover:no-underline"
+            className="flex items-center gap-1 text-xs font-bold underline hover:no-underline"
           >
+            <RefreshCw className="w-3 h-3" />
             Retry
           </button>
         </div>
       )}
 
-      {/* List */}
       {loading ? (
         <ReviewsSkeleton count={5} />
       ) : reviews.length === 0 ? (
         <div className="bg-brand-card border border-gray-700 rounded-2xl p-12 text-center">
-          <div className="text-5xl mb-3" aria-hidden="true">
-            ⭐
-          </div>
+          <Star className="w-12 h-12 text-gray-600 mx-auto mb-3" />
           <h2 className="font-bold text-white text-lg">No reviews yet</h2>
           <p className="text-gray-400 text-sm mt-1 max-w-sm mx-auto">
             Reviews appear here once customers submit feedback after their
@@ -720,12 +708,14 @@ export default function AdminReviews() {
                   </div>
                   <div className="flex flex-wrap gap-1 justify-end shrink-0">
                     {!review.is_published && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-bold flex items-center gap-0.5">
+                        <EyeOff className="w-3 h-3" />
                         HIDDEN
                       </span>
                     )}
                     {review.is_featured && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-brand-gold/20 text-brand-gold font-bold">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-brand-gold/20 text-brand-gold font-bold flex items-center gap-0.5">
+                        <Star className="w-3 h-3 fill-brand-gold" />
                         FEATURED
                       </span>
                     )}
@@ -762,23 +752,40 @@ export default function AdminReviews() {
                   <button
                     onClick={() => toggleField(review, "is_published")}
                     disabled={busy}
-                    className={`flex-1 min-w-[100px] py-2 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 disabled:opacity-50 ${
+                    className={`flex-1 min-w-[100px] py-2 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 disabled:opacity-50 flex items-center justify-center gap-1 ${
                       review.is_published
                         ? "bg-red-600/20 hover:bg-red-600/30 text-red-400 focus:ring-red-500/40"
                         : "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 focus:ring-emerald-500/40"
                     }`}
                   >
-                    {busy ? "…" : review.is_published ? "Hide" : "Publish"}
+                    {busy ? (
+                      "…"
+                    ) : review.is_published ? (
+                      <>
+                        <EyeOff className="w-3 h-3" />
+                        Hide
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3 h-3" />
+                        Publish
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={() => toggleField(review, "is_featured")}
                     disabled={busy}
-                    className={`flex-1 min-w-[100px] py-2 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 disabled:opacity-50 ${
+                    className={`flex-1 min-w-[100px] py-2 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 disabled:opacity-50 flex items-center justify-center gap-1 ${
                       review.is_featured
                         ? "bg-gray-700 hover:bg-gray-600 text-gray-300 focus:ring-gray-600"
                         : "bg-brand-gold/20 hover:bg-brand-gold/30 text-brand-gold focus:ring-brand-gold/40"
                     }`}
                   >
+                    <Star
+                      className={`w-3 h-3 ${
+                        review.is_featured ? "" : "fill-brand-gold"
+                      }`}
+                    />
                     {busy
                       ? "…"
                       : review.is_featured
@@ -791,7 +798,7 @@ export default function AdminReviews() {
                     aria-label={`Delete review ${review.order_reference}`}
                     className="px-3 py-2 rounded-lg bg-red-600/20 hover:bg-red-600/30 disabled:opacity-50 text-red-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
                   >
-                    🗑
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </article>
@@ -800,7 +807,6 @@ export default function AdminReviews() {
         </div>
       )}
 
-      {/* ---------- Delete confirm ---------- */}
       {deleteTarget && (
         <Modal
           onClose={() => (deleting ? null : setDeleteTarget(null))}
@@ -808,12 +814,17 @@ export default function AdminReviews() {
           disableClose={deleting}
         >
           <div className="p-6 space-y-4">
-            <h3
-              id="delete-review-title"
-              className="font-heading text-lg font-bold text-white"
-            >
-              Delete this review?
-            </h3>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-red-400" />
+              </div>
+              <h3
+                id="delete-review-title"
+                className="font-heading text-lg font-bold text-white"
+              >
+                Delete this review?
+              </h3>
+            </div>
             <div className="p-3 rounded-xl bg-brand-dark border border-gray-700 text-sm">
               <StarRating rating={clampRating(deleteTarget.rating)} />
               <p className="text-gray-300 mt-2 line-clamp-3">
@@ -844,7 +855,6 @@ export default function AdminReviews() {
         </Modal>
       )}
 
-      {/* ---------- Photo lightbox ---------- */}
       {lightbox && (
         <Lightbox
           photos={lightbox.photos}
@@ -860,10 +870,6 @@ export default function AdminReviews() {
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Lightbox                                                           */
-/* ------------------------------------------------------------------ */
 
 function Lightbox({ photos, index, onClose, onIndexChange }) {
   const total = photos.length;
@@ -905,9 +911,9 @@ function Lightbox({ photos, index, onClose, onIndexChange }) {
       <button
         onClick={onClose}
         aria-label="Close"
-        className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl focus:outline-none focus:ring-2 focus:ring-white/40"
+        className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white focus:outline-none focus:ring-2 focus:ring-white/40 flex items-center justify-center"
       >
-        ✕
+        <X className="w-5 h-5" />
       </button>
 
       {total > 1 && (
@@ -915,16 +921,16 @@ function Lightbox({ photos, index, onClose, onIndexChange }) {
           <button
             onClick={goPrev}
             aria-label="Previous photo"
-            className="absolute left-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl focus:outline-none focus:ring-2 focus:ring-white/40"
+            className="absolute left-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white focus:outline-none focus:ring-2 focus:ring-white/40 flex items-center justify-center"
           >
-            ‹
+            <ChevronLeft className="w-5 h-5" />
           </button>
           <button
             onClick={goNext}
             aria-label="Next photo"
-            className="absolute right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl focus:outline-none focus:ring-2 focus:ring-white/40"
+            className="absolute right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white focus:outline-none focus:ring-2 focus:ring-white/40 flex items-center justify-center"
           >
-            ›
+            <ChevronRight className="w-5 h-5" />
           </button>
         </>
       )}

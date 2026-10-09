@@ -3,22 +3,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutDashboard,
+  UtensilsCrossed,
+  ChefHat,
+  MapPin,
+  Store,
+  Ticket,
+  Gift,
+  Star,
+  Users,
+  UserCircle,
+  ExternalLink,
+  LogOut,
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 
 const TOKEN_KEY = "mrf_token";
 const TOKEN_ISSUED_AT_KEY = "mrf_token_issued_at";
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const TABS = [
-  { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin/menu", label: "Menu Items" },
-  { href: "/admin/builder", label: "Builder Options" },
-  { href: "/admin/zones", label: "Delivery Zones" },
-  { href: "/admin/branches", label: "Branches" },
-  { href: "/admin/promo-codes", label: "Promo Codes" },
-  { href: "/admin/referrals", label: "Referrals" },
-  { href: "/admin/reviews", label: "Reviews" },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/profile", label: "Profile" },
+  { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/menu", label: "Menu Items", icon: UtensilsCrossed },
+  { href: "/admin/builder", label: "Builder Options", icon: ChefHat },
+  { href: "/admin/zones", label: "Delivery Zones", icon: MapPin },
+  { href: "/admin/branches", label: "Branches", icon: Store },
+  { href: "/admin/promo-codes", label: "Promo Codes", icon: Ticket },
+  { href: "/admin/referrals", label: "Referrals", icon: Gift },
+  { href: "/admin/reviews", label: "Reviews", icon: Star },
+  { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/profile", label: "Profile", icon: UserCircle },
 ];
 
 function getValidToken() {
@@ -47,16 +65,22 @@ function clearToken() {
 
 function Toast({ toast }) {
   if (!toast) return null;
-  const styles =
-    toast.type === "error"
-      ? "bg-red-950/90 border-red-700 text-red-200"
-      : "bg-emerald-950/90 border-emerald-700 text-emerald-200";
+  const isError = toast.type === "error";
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${styles}`}
+      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur flex items-center gap-2 ${
+        isError
+          ? "bg-red-950/90 border-red-700 text-red-200"
+          : "bg-emerald-950/90 border-emerald-700 text-emerald-200"
+      }`}
     >
+      {isError ? (
+        <XCircle className="w-4 h-4" />
+      ) : (
+        <CheckCircle2 className="w-4 h-4" />
+      )}
       {toast.message}
     </div>
   );
@@ -112,6 +136,7 @@ export default function AdminLayout({ children }) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   }, []);
+
   useEffect(
     () => () => toastTimer.current && clearTimeout(toastTimer.current),
     []
@@ -220,14 +245,16 @@ export default function AdminLayout({ children }) {
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden sm:inline-flex px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-200 transition-colors"
+              className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-200 transition-colors"
             >
-              View Site ↗
+              View Site
+              <ExternalLink className="w-3.5 h-3.5" />
             </Link>
             <button
               onClick={() => setConfirmLogout(true)}
-              className="px-4 py-2 rounded-xl bg-brand-crimson hover:bg-red-700 text-xs font-bold text-white transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-crimson hover:bg-red-700 text-xs font-bold text-white transition-colors"
             >
+              <LogOut className="w-3.5 h-3.5" />
               Logout
             </button>
           </div>
@@ -239,18 +266,20 @@ export default function AdminLayout({ children }) {
         >
           {TABS.map((tab) => {
             const active = tab.href === activeHref;
+            const Icon = tab.icon;
             return (
               <Link
                 key={tab.href}
                 href={tab.href}
                 ref={active ? activeTabRef : null}
                 aria-current={active ? "page" : undefined}
-                className={`px-4 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition-colors rounded-t-md ${
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition-colors rounded-t-md ${
                   active
                     ? "border-brand-gold text-brand-gold"
                     : "border-transparent text-gray-400 hover:text-white"
                 }`}
               >
+                <Icon className="w-4 h-4" />
                 {tab.label}
               </Link>
             );
@@ -274,26 +303,31 @@ export default function AdminLayout({ children }) {
             className="absolute inset-0 bg-black/70"
           />
           <div className="relative bg-brand-card border border-gray-700 rounded-3xl max-w-sm w-full p-6 space-y-4">
-            <h2
-              id="admin-logout-title"
-              className="font-heading text-lg font-bold text-white"
-            >
-              Sign out of admin?
-            </h2>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <h2
+                id="admin-logout-title"
+                className="font-heading text-lg font-bold text-white"
+              >
+                Sign out of admin?
+              </h2>
+            </div>
             <p className="text-xs text-gray-400">
               You'll need to sign in again to access the admin panel.
             </p>
             <div className="flex gap-3 pt-1">
               <button
                 onClick={() => setConfirmLogout(false)}
-                className="flex-1 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold text-sm"
+                className="flex-1 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold text-sm transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={doLogout}
                 autoFocus
-                className="flex-1 py-3 rounded-xl bg-brand-crimson hover:bg-red-700 text-white font-bold text-sm"
+                className="flex-1 py-3 rounded-xl bg-brand-crimson hover:bg-red-700 text-white font-bold text-sm transition-colors"
               >
                 Sign out
               </button>

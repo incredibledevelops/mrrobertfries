@@ -1,13 +1,29 @@
 import os
 import secrets
+from io import BytesIO
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from app.core.config import settings
 
 ALLOWED_SUBDIRS = {"menu", "categories", "builder"}
+
+# PIL format names → canonical extension we will use on disk.
+_PIL_FORMAT_EXT = {
+    "JPEG": ".jpg",
+    "PNG": ".png",
+    "WEBP": ".webp",
+}
+
+# MIME types we accept.
+_ALLOWED_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+}
 
 
 def _ensure_dir(path: Path) -> None:
@@ -15,12 +31,12 @@ def _ensure_dir(path: Path) -> None:
 
 
 def _validate_content_type(content_type: str) -> None:
-    if content_type not in settings.allowed_image_types_list:
+    if content_type not in _ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"Invalid image type '{content_type}'. "
-                f"Allowed: {', '.join(settings.ALLOWED_IMAGE_TYPES)}"
+                f"Allowed: {', '.join(sorted(_ALLOWED_CONTENT_TYPES))}"
             ),
         )
 
@@ -36,10 +52,7 @@ def _validate_size(size: int) -> None:
         )
 
 
-def _build_filename(original: str, subdir: str) -> str:
-    ext = Path(original).suffix.lower() or ".jpg"
-    if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
-        ext = ".jpg"
+def _build_filename(subdir: str, ext: str) -> str:
     token = secrets.token_hex(8)
     return f"{subdir}_{token}{ext}"
 
@@ -61,39 +74,64 @@ async def save_upload(
     contents = await file.read()
     _validate_size(len(contents))
 
+    # Open with PIL first — this is the real content-type check. If the
+    # bytes aren't a valid image PIL will raise and we reject the upload.
+    try:
+        img = Image.open(BytesIO(contents))
+        img.load()  # force decode so truncated images fail here
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File is not a valid image.",
+        )
+
+    fmt = (img.format or "").upper()
+    ext = _PIL_FORMAT_EXT.get(fmt)
+    if not ext:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported image format '{fmt}'. Use JPEG, PNG, or WebP.",
+        )
+
     target_dir = Path(settings.UPLOAD_DIR) / subdir
     _ensure_dir(target_dir)
 
-    filename = _build_filename(file.filename or "image.jpg", subdir)
+    filename = _build_filename(subdir, ext)
     filepath = target_dir / filename
 
-    # Optimize / resize using PIL
+    # Normalize mode and resize.
+    if img.mode in ("RGBA", "P"):
+        # Save transparency-preserving formats as-is; convert to RGB for JPEG.
+        if ext == ".jpg":
+            img = img.convert("RGB")
+    if img.mode not in ("RGB", "RGBA", "L"):
+        img = img.convert("RGB")
+
+    if img.width > max_width:
+        ratio = max_width / float(img.width)
+        new_height = int(float(img.height) * ratio)
+        img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+
+    save_kwargs: dict = {"optimize": True}
+    if ext == ".png":
+        save_kwargs["format"] = "PNG"
+    elif ext == ".webp":
+        save_kwargs["format"] = "WEBP"
+        save_kwargs["quality"] = quality
+    else:
+        save_kwargs["format"] = "JPEG"
+        save_kwargs["quality"] = quality
+
     try:
-        from io import BytesIO
-
-        img = Image.open(BytesIO(contents))
-        img = img.convert("RGB") if img.mode in ("RGBA", "P") else img
-
-        if img.width > max_width:
-            ratio = max_width / float(img.width)
-            new_height = int(float(img.height) * ratio)
-            img = img.resize((max_width, new_height), Image.LANCZOS)
-
-        save_kwargs = {"optimize": True}
-        if filename.endswith(".png"):
-            save_kwargs["format"] = "PNG"
-        elif filename.endswith(".webp"):
-            save_kwargs["format"] = "WEBP"
-            save_kwargs["quality"] = quality
-        else:
-            save_kwargs["format"] = "JPEG"
-            save_kwargs["quality"] = quality
-
         img.save(filepath, **save_kwargs)
     except Exception:
-        # Fallback: save raw bytes
-        with open(filepath, "wb") as f:
-            f.write(contents)
+        # If PIL succeeds decoding but fails encoding, reject the upload.
+        # Previously we fell back to writing raw bytes — which allowed
+        # arbitrary payloads to be served with a spoofed extension.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not process image.",
+        )
 
     url_path = f"/uploads/{subdir}/{filename}"
     return {

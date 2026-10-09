@@ -2,12 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Search,
+  X,
+  AlertCircle,
+  RefreshCw,
+  ChefHat,
+  UtensilsCrossed,
+  Drumstick,
+  Soup,
+  Pizza,
+  Check,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { SkeletonBlock, SkeletonLine } from "@/components/Skeleton";
-
-/* ------------------------------------------------------------------ */
-/*  constants                                                          */
-/* ------------------------------------------------------------------ */
 
 const TOKEN_KEY = "mrf_token";
 const TOKEN_ISSUED_AT_KEY = "mrf_token_issued_at";
@@ -20,11 +33,11 @@ const TYPE_LABELS = {
   sauce: "Sauce",
   topping: "Topping",
 };
-const TYPE_EMOJI = {
-  base: "🍚",
-  protein: "🍗",
-  sauce: "🥫",
-  topping: "🧀",
+const TYPE_ICONS = {
+  base: UtensilsCrossed,
+  protein: Drumstick,
+  sauce: Soup,
+  topping: Pizza,
 };
 const TYPE_PLURAL = {
   base: "Bases",
@@ -42,10 +55,6 @@ const EMPTY_FORM = {
   is_available: true,
   display_order: 0,
 };
-
-/* ------------------------------------------------------------------ */
-/*  helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 function getAdminToken() {
   if (typeof window === "undefined") return null;
@@ -96,21 +105,18 @@ function formatPrice(price) {
   return `+ ${formatGHS(n)}`;
 }
 
-/* ------------------------------------------------------------------ */
-/*  UI primitives                                                      */
-/* ------------------------------------------------------------------ */
-
 function Toast({ toast }) {
   if (!toast) return null;
-  const styles =
-    toast.type === "error"
-      ? "bg-red-950/90 border-red-700 text-red-200"
-      : "bg-emerald-950/90 border-emerald-700 text-emerald-200";
+  const isError = toast.type === "error";
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${styles}`}
+      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${
+        isError
+          ? "bg-red-950/90 border-red-700 text-red-200"
+          : "bg-emerald-950/90 border-emerald-700 text-emerald-200"
+      }`}
     >
       {toast.message}
     </div>
@@ -227,10 +233,6 @@ function BuilderSkeleton() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  page                                                               */
-/* ------------------------------------------------------------------ */
-
 export default function AdminBuilder() {
   const router = useRouter();
 
@@ -268,7 +270,6 @@ export default function AdminBuilder() {
     []
   );
 
-  /* ---------- auth ---------- */
   useEffect(() => {
     const t = getAdminToken();
     if (!t) {
@@ -287,7 +288,6 @@ export default function AdminBuilder() {
     return () => window.removeEventListener("storage", onStorage);
   }, [router]);
 
-  /* ---------- authed fetch ---------- */
   const authFetch = useCallback(
     async (url, init = {}) => {
       const headers = {
@@ -305,7 +305,6 @@ export default function AdminBuilder() {
     [token, router]
   );
 
-  /* ---------- load ---------- */
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -327,15 +326,12 @@ export default function AdminBuilder() {
     load();
   }, [token, reloadKey, load]);
 
-  /* ---------- form open/close ---------- */
   const openCreate = useCallback(
     (type = "base") => {
       setForm({
         ...EMPTY_FORM,
         type,
-        // sensible default display_order = end of current list
-        display_order:
-          options.filter((o) => o.type === type).length,
+        display_order: options.filter((o) => o.type === type).length,
       });
       setEditing(null);
       setFormError("");
@@ -359,7 +355,6 @@ export default function AdminBuilder() {
     setShowForm(true);
   }, []);
 
-  /* ---------- validation ---------- */
   const formValidation = useMemo(() => {
     const errs = {};
     if (!form.name.trim()) errs.name = "Name is required.";
@@ -374,7 +369,6 @@ export default function AdminBuilder() {
     )
       errs.display_order = "Must be a number.";
 
-    // Warn (not error) if setting default but another exists
     let defaultConflict = null;
     if (form.is_default) {
       const otherDefault = options.find(
@@ -393,7 +387,6 @@ export default function AdminBuilder() {
 
   const formValid = Object.keys(formValidation.errs).length === 0;
 
-  /* ---------- save ---------- */
   const handleSave = useCallback(
     async (e) => {
       e.preventDefault();
@@ -440,7 +433,6 @@ export default function AdminBuilder() {
     [form, formValid, editing, authFetch, showToast]
   );
 
-  /* ---------- delete ---------- */
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     const opt = deleteTarget;
@@ -470,7 +462,6 @@ export default function AdminBuilder() {
     }
   }, [deleteTarget, authFetch, showToast]);
 
-  /* ---------- derived ---------- */
   const filteredOptions = useMemo(() => {
     let list = options;
     if (typeFilter !== "all") list = list.filter((o) => o.type === typeFilter);
@@ -490,7 +481,6 @@ export default function AdminBuilder() {
     for (const o of filteredOptions) {
       if (acc[o.type]) acc[o.type].push(o);
     }
-    // sort by display_order then name
     for (const k of Object.keys(acc)) {
       acc[k].sort((a, b) => {
         const d = safeNumber(a.display_order) - safeNumber(b.display_order);
@@ -514,7 +504,6 @@ export default function AdminBuilder() {
 
   const hasAnyResults = TYPES.some((t) => grouped[t].length > 0);
 
-  /* ---------- render guard ---------- */
   if (!authChecked || !token) {
     return (
       <div>
@@ -526,7 +515,6 @@ export default function AdminBuilder() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="font-heading text-3xl font-extrabold text-white">
@@ -539,36 +527,38 @@ export default function AdminBuilder() {
         </div>
         <button
           onClick={() => openCreate("base")}
-          className="px-5 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
         >
-          + New Option
+          <Plus className="w-4 h-4" />
+          New Option
         </button>
       </div>
 
-      {/* Summary + filters */}
       {!loading && options.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="text-xs text-gray-400">
-            <span className="text-white font-bold">{totals.total}</span>{" "}
-            option{totals.total === 1 ? "" : "s"} total
-            <span className="text-gray-600 mx-2">·</span>
-            {TYPES.map((t, i) => (
-              <span key={t}>
-                {TYPE_EMOJI[t]} {totals.byType[t]} {TYPE_PLURAL[t].toLowerCase()}
-                {i < TYPES.length - 1 && (
-                  <span className="text-gray-600 mx-1">,</span>
-                )}
-              </span>
-            ))}
+          <div className="text-xs text-gray-400 flex flex-wrap items-center gap-2">
+            <span className="text-white font-bold">{totals.total}</span>
+            <span>option{totals.total === 1 ? "" : "s"} total</span>
+            <span className="text-gray-600">·</span>
+            {TYPES.map((t, i) => {
+              const Icon = TYPE_ICONS[t];
+              return (
+                <span key={t} className="flex items-center gap-1">
+                  <Icon className="w-3.5 h-3.5" />
+                  {totals.byType[t]} {TYPE_PLURAL[t].toLowerCase()}
+                  {i < TYPES.length - 1 && (
+                    <span className="text-gray-600 ml-1">,</span>
+                  )}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
 
       <div className="flex flex-wrap items-center gap-2 mb-6">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
-            🔍
-          </span>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -579,7 +569,7 @@ export default function AdminBuilder() {
         <div
           role="tablist"
           aria-label="Filter by type"
-          className="flex gap-1 bg-brand-card border border-gray-700 rounded-xl p-1"
+          className="flex gap-1 bg-brand-card border border-gray-700 rounded-xl p-1 overflow-x-auto no-scrollbar"
         >
           <button
             role="tab"
@@ -593,48 +583,50 @@ export default function AdminBuilder() {
           >
             All
           </button>
-          {TYPES.map((t) => (
-            <button
-              key={t}
-              role="tab"
-              aria-selected={typeFilter === t}
-              onClick={() => setTypeFilter(t)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/40 ${
-                typeFilter === t
-                  ? "bg-brand-gold text-brand-dark"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              {TYPE_EMOJI[t]} {TYPE_LABELS[t]}s
-            </button>
-          ))}
+          {TYPES.map((t) => {
+            const Icon = TYPE_ICONS[t];
+            return (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={typeFilter === t}
+                onClick={() => setTypeFilter(t)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/40 ${
+                  typeFilter === t
+                    ? "bg-brand-gold text-brand-dark"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {TYPE_LABELS[t]}s
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Error */}
       {error && (
         <div
           role="alert"
           className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-3"
         >
+          <AlertCircle className="w-5 h-5 shrink-0" />
           <span className="flex-1">{error}</span>
           <button
             onClick={() => setReloadKey((k) => k + 1)}
-            className="text-xs font-bold underline hover:no-underline"
+            className="flex items-center gap-1 text-xs font-bold underline hover:no-underline"
           >
+            <RefreshCw className="w-3 h-3" />
             Retry
           </button>
         </div>
       )}
 
-      {/* Sections */}
       {loading ? (
         <BuilderSkeleton />
       ) : options.length === 0 ? (
         <div className="bg-brand-card border border-gray-700 rounded-2xl p-12 text-center">
-          <div className="text-5xl mb-3" aria-hidden="true">
-            🧑‍🍳
-          </div>
+          <ChefHat className="w-12 h-12 text-gray-600 mx-auto mb-3" />
           <h2 className="font-bold text-white text-lg">
             No builder options yet
           </h2>
@@ -668,16 +660,16 @@ export default function AdminBuilder() {
         <div className="space-y-10">
           {TYPES.map((type) => {
             const items = grouped[type];
+            const TypeIcon = TYPE_ICONS[type];
             if (typeFilter !== "all" && typeFilter !== type) return null;
             if (items.length === 0 && (query || typeFilter !== "all")) {
-              // skip empty sections when filtering/searching
               return null;
             }
             return (
               <section key={type}>
                 <div className="flex items-center justify-between mb-3 gap-3">
                   <h2 className="font-heading text-lg font-bold text-white flex items-center gap-2">
-                    <span aria-hidden="true">{TYPE_EMOJI[type]}</span>
+                    <TypeIcon className="w-5 h-5 text-brand-gold" />
                     {TYPE_PLURAL[type]}
                     <span className="text-xs text-gray-500 font-normal">
                       ({items.length})
@@ -685,9 +677,10 @@ export default function AdminBuilder() {
                   </h2>
                   <button
                     onClick={() => openCreate(type)}
-                    className="text-xs text-brand-gold font-bold hover:underline focus:outline-none focus:ring-2 focus:ring-brand-gold/40 rounded px-1"
+                    className="flex items-center gap-1 text-xs text-brand-gold font-bold hover:underline focus:outline-none focus:ring-2 focus:ring-brand-gold/40 rounded px-1"
                   >
-                    + Add {TYPE_LABELS[type]}
+                    <Plus className="w-3.5 h-3.5" />
+                    Add {TYPE_LABELS[type]}
                   </button>
                 </div>
 
@@ -715,12 +708,14 @@ export default function AdminBuilder() {
                                 {opt.name}
                               </h3>
                               {opt.is_default && (
-                                <span className="text-[10px] px-2 py-0.5 rounded bg-brand-gold/20 text-brand-gold font-bold">
+                                <span className="text-[10px] px-2 py-0.5 rounded bg-brand-gold/20 text-brand-gold font-bold flex items-center gap-0.5">
+                                  <Check className="w-3 h-3" />
                                   DEFAULT
                                 </span>
                               )}
                               {!opt.is_available && (
-                                <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">
+                                <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-bold flex items-center gap-0.5">
+                                  <EyeOff className="w-3 h-3" />
                                   HIDDEN
                                 </span>
                               )}
@@ -738,17 +733,18 @@ export default function AdminBuilder() {
                             <button
                               onClick={() => openEdit(opt)}
                               disabled={busy}
-                              className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600"
+                              className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600 flex items-center gap-1"
                             >
+                              <Pencil className="w-3 h-3" />
                               Edit
                             </button>
                             <button
                               onClick={() => setDeleteTarget(opt)}
                               disabled={busy}
                               aria-label={`Delete ${opt.name}`}
-                              className="px-2 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 disabled:opacity-50 text-red-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
+                              className="px-2 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 disabled:opacity-50 text-red-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40 flex items-center justify-center"
                             >
-                              {busy ? "…" : "🗑"}
+                              {busy ? "…" : <Trash2 className="w-3.5 h-3.5" />}
                             </button>
                           </div>
                         </article>
@@ -762,7 +758,6 @@ export default function AdminBuilder() {
         </div>
       )}
 
-      {/* ---------- Add/Edit form modal ---------- */}
       {showForm && (
         <Modal
           onClose={() => setShowForm(false)}
@@ -784,15 +779,16 @@ export default function AdminBuilder() {
                 aria-label="Close"
                 className="text-gray-400 hover:text-white p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-600 disabled:opacity-50"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {formError && (
               <div
                 role="alert"
-                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs"
+                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-start gap-2"
               >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 {formError}
               </div>
             )}
@@ -803,23 +799,27 @@ export default function AdminBuilder() {
                 aria-label="Option type"
                 className="grid grid-cols-2 sm:grid-cols-4 gap-2"
               >
-                {TYPES.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    role="radio"
-                    aria-checked={form.type === t}
-                    disabled={saving}
-                    onClick={() => setForm((f) => ({ ...f, type: t }))}
-                    className={`py-2.5 rounded-xl text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/50 disabled:opacity-50 ${
-                      form.type === t
-                        ? "bg-brand-gold text-brand-dark"
-                        : "bg-brand-dark border border-gray-700 text-gray-300 hover:text-white"
-                    }`}
-                  >
-                    {TYPE_EMOJI[t]} {TYPE_LABELS[t]}
-                  </button>
-                ))}
+                {TYPES.map((t) => {
+                  const Icon = TYPE_ICONS[t];
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      role="radio"
+                      aria-checked={form.type === t}
+                      disabled={saving}
+                      onClick={() => setForm((f) => ({ ...f, type: t }))}
+                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/50 disabled:opacity-50 ${
+                        form.type === t
+                          ? "bg-brand-gold text-brand-dark"
+                          : "bg-brand-dark border border-gray-700 text-gray-300 hover:text-white"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {TYPE_LABELS[t]}
+                    </button>
+                  );
+                })}
               </div>
             </Field>
 
@@ -956,14 +956,16 @@ export default function AdminBuilder() {
             </div>
 
             {formValidation.defaultConflict && form.is_default && (
-              <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2">
-                Heads up: <strong>{formValidation.defaultConflict}</strong>{" "}
-                is currently the default{" "}
-                {TYPE_LABELS[form.type].toLowerCase()}. Saving will replace it.
+              <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 flex items-start gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  Heads up: <strong>{formValidation.defaultConflict}</strong>{" "}
+                  is currently the default{" "}
+                  {TYPE_LABELS[form.type].toLowerCase()}. Saving will replace it.
+                </span>
               </p>
             )}
 
-            {/* Sticky footer */}
             <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 bg-brand-card border-t border-gray-700 flex gap-3">
               <button
                 type="button"
@@ -985,7 +987,6 @@ export default function AdminBuilder() {
         </Modal>
       )}
 
-      {/* ---------- Delete confirm ---------- */}
       {deleteTarget && (
         <Modal
           onClose={() => (deleting ? null : setDeleteTarget(null))}
@@ -993,12 +994,17 @@ export default function AdminBuilder() {
           disableClose={deleting}
         >
           <div className="p-6 space-y-4">
-            <h3
-              id="delete-option-title"
-              className="font-heading text-lg font-bold text-white"
-            >
-              Delete option?
-            </h3>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-red-400" />
+              </div>
+              <h3
+                id="delete-option-title"
+                className="font-heading text-lg font-bold text-white"
+              >
+                Delete option?
+              </h3>
+            </div>
             <p className="text-sm text-gray-400">
               You're about to delete{" "}
               <span className="text-white font-bold">

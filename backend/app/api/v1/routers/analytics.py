@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.core.config import settings
 from app.core.deps import get_current_admin
 from app.crud import analytics as analytics_crud
 from app.crud import review as review_crud
@@ -101,14 +102,17 @@ async def reviews_overview():
     return await review_crud.summary()
 
 
-# ---------- DEBUG — no auth issues possible (still behind admin) ----------
+# ---------- DEBUG — dev-only ----------
 
 @router.get("/debug")
 async def debug_overview(days: int = Query(30, ge=1, le=365)):
     """
     Runs every analytics function and reports which ones succeed or fail.
-    Use this to pinpoint what's crashing the /overview endpoint.
+    Only available when DEBUG=True in settings. In production it 404s.
     """
+    if not settings.DEBUG:
+        raise HTTPException(status_code=404, detail="Not found")
+
     start, end = analytics_crud.default_range(days=days)
     results = {
         "range": {

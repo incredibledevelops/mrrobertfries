@@ -5,6 +5,7 @@ If ARKESEL_API_KEY is empty, messages are logged to console instead
 of sent — so development works without a real Arkesel account.
 """
 import logging
+import re
 from typing import List, Optional
 
 import httpx
@@ -14,23 +15,45 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+class InvalidPhone(ValueError):
+    """Raised when a recipient phone number cannot be normalized."""
+
+
 def _normalize_phone(phone: str) -> str:
-    digits = "".join(ch for ch in phone if ch.isdigit())
-    if digits.startswith("233"):
+    """
+    Normalize a Ghanaian phone number to the `233XXXXXXXXX` E.164 form
+    Arkesel expects. Raises InvalidPhone if the input can't be parsed.
+
+    Accepts:
+      0XXXXXXXXX        (10 digits, leading 0)
+      233XXXXXXXXX      (12 digits, E.164 Ghana)
+      XXXXXXXXX         (9 digits, missing leading 0)
+    """
+    digits = re.sub(r"\D", "", str(phone or ""))
+    if not digits:
+        raise InvalidPhone("empty phone number")
+
+    if digits.startswith("233") and len(digits) == 12:
         return digits
-    if digits.startswith("0"):
+    if digits.startswith("0") and len(digits) == 10:
         return "233" + digits[1:]
     if len(digits) == 9:
         return "233" + digits
-    return digits
+
+    raise InvalidPhone(f"unrecognized phone number format: {phone!r}")
 
 
 async def send_sms(to: str, message: str) -> bool:
-    if not settings.ARKESEL_API_KEY:
-        logger.info("[SMS SKIPPED — no ARKESEL_API_KEY] to=%s msg=%s", to, message)
+    try:
+        recipient = _normalize_phone(to)
+    except InvalidPhone as e:
+        logger.warning("Skipping SMS — bad phone %r (%s)", to, e)
         return False
 
-    recipient = _normalize_phone(to)
+    if not settings.ARKESEL_API_KEY:
+        logger.info("[SMS SKIPPED — no ARKESEL_API_KEY] to=%s msg=%s", recipient, message)
+        return False
+
     url = f"{settings.ARKESEL_BASE_URL.rstrip('/')}/sms/send"
 
     payload = {
@@ -68,15 +91,25 @@ async def send_sms(to: str, message: str) -> bool:
 async def send_sms_bulk(recipients: List[str], message: str) -> bool:
     if not recipients:
         return True
+
+    normalized: list[str] = []
+    for r in recipients:
+        try:
+            normalized.append(_normalize_phone(r))
+        except InvalidPhone as e:
+            logger.warning("Skipping bad recipient %r (%s)", r, e)
+
+    if not normalized:
+        return False
+
     if not settings.ARKESEL_API_KEY:
         logger.info(
             "[SMS BULK SKIPPED — no ARKESEL_API_KEY] to=%s msg=%s",
-            recipients, message,
+            normalized, message,
         )
         return False
 
     url = f"{settings.ARKESEL_BASE_URL.rstrip('/')}/sms/send"
-    normalized = [_normalize_phone(r) for r in recipients]
 
     payload = {
         "sender": settings.ARKESEL_SENDER_ID,

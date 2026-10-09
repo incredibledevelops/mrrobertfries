@@ -90,6 +90,12 @@ async def send_order_receipt(order) -> bool:
         for item in order.items
     )
 
+    # NOTE: link points at the frontend order-tracking page.
+    # `settings.FRONTEND_URL` defaults to http://localhost:3000 in dev
+    # and must be set to the public origin (e.g. https://mrfries.com)
+    # in production.
+    frontend_url = settings.FRONTEND_URL.rstrip("/")
+
     html = render_template(
         "receipt.html",
         {
@@ -101,7 +107,7 @@ async def send_order_receipt(order) -> bool:
             "total": f"{order.total:.2f}",
             "delivery_zone": order.delivery_zone_name,
             "delivery_address": order.delivery_address,
-            "frontend_url": "http://localhost:3000",
+            "frontend_url": frontend_url,
         },
     )
 

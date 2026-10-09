@@ -17,6 +17,19 @@ def _generate_referral_code() -> str:
     return "MRF-" + secrets.token_hex(3).upper()
 
 
+# Statuses that count toward revenue / spend.
+_REVENUE_STATUSES = (
+    OrderStatus.PAID,
+    OrderStatus.PREPARING,
+    OrderStatus.READY,
+    OrderStatus.OUT_FOR_DELIVERY,
+    OrderStatus.DELIVERED,
+)
+
+# Statuses that count toward "orders placed" (excludes cancelled/failed).
+_COUNTED_STATUSES = _REVENUE_STATUSES + (OrderStatus.PENDING,)
+
+
 async def get_by_phone(phone: str) -> Optional[Customer]:
     return await Customer.find_one(Customer.phone == phone)
 
@@ -74,10 +87,17 @@ async def add_address(
         for a in customer.saved_addresses:
             a.is_default = False
 
+    zone_oid = None
+    if zone_id:
+        try:
+            zone_oid = PydanticObjectId(zone_id)
+        except Exception:
+            raise ValueError("Invalid zone_id")
+
     customer.saved_addresses.append(
         SavedAddress(
             label=label,
-            zone_id=PydanticObjectId(zone_id) if zone_id else None,
+            zone_id=zone_oid,
             zone_name=zone_name,
             address=address,
             is_default=is_default or len(customer.saved_addresses) == 0,
@@ -106,7 +126,10 @@ async def update_address(
         if v is None:
             continue
         if k == "zone_id":
-            addr.zone_id = PydanticObjectId(v) if v else None
+            try:
+                addr.zone_id = PydanticObjectId(v) if v else None
+            except Exception:
+                raise ValueError("Invalid zone_id")
         elif hasattr(addr, k):
             setattr(addr, k, v)
 
@@ -155,6 +178,26 @@ async def toggle_favorite(
     return customer, is_fav
 
 
+async def remove_favorite(
+    customer: Customer,
+    menu_item_id: str,
+) -> tuple[Customer, bool]:
+    """
+    Idempotent removal. Returns (customer, False). Never raises if the item
+    wasn't favorited — the caller can treat it as a no-op success.
+    """
+    try:
+        oid = PydanticObjectId(menu_item_id)
+    except Exception:
+        raise ValueError("Invalid menu item id")
+
+    if oid in customer.favorite_item_ids:
+        customer.favorite_item_ids.remove(oid)
+        customer.updated_at = _now()
+        await customer.save()
+    return customer, False
+
+
 async def track_favorites_from_order(customer: Customer, order: Order) -> None:
     """Called after every paid order — adds menu items to favorites set."""
     changed = False
@@ -183,18 +226,14 @@ async def order_history(
 
 async def order_stats(phone: str) -> dict:
     orders = await Order.find(Order.customer.phone == phone).to_list()
+
+    # Counted orders exclude cancelled / failed.
+    counted = [o for o in orders if o.status in _COUNTED_STATUSES]
     completed = [o for o in orders if o.status == OrderStatus.DELIVERED]
+    revenue_orders = [o for o in orders if o.status in _REVENUE_STATUSES]
+
     return {
-        "total_orders": len(orders),
+        "total_orders": len(counted),
         "completed_orders": len(completed),
-        "total_spent": round(sum(
-            o.total for o in orders
-            if o.status in (
-                OrderStatus.PAID,
-                OrderStatus.PREPARING,
-                OrderStatus.READY,
-                OrderStatus.OUT_FOR_DELIVERY,
-                OrderStatus.DELIVERED,
-            )
-        ), 2),
+        "total_spent": round(sum(o.total for o in revenue_orders), 2),
     }

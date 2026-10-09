@@ -23,6 +23,9 @@ def _balance_out(customer) -> LoyaltyBalanceOut:
         lifetime_points_redeemed=customer.lifetime_points_redeemed,
         cash_value=loyalty_crud.points_to_cash(customer.loyalty_points),
         min_redeem_points=settings.LOYALTY_MIN_REDEEM,
+        # Rate the client can use to preview redemptions without drifting
+        # from the server's real calculation.
+        points_to_cash_rate=settings.LOYALTY_POINTS_TO_CEDI,
     )
 
 
@@ -40,6 +43,7 @@ async def get_balance(phone: str):
             lifetime_points_redeemed=0,
             cash_value=0.0,
             min_redeem_points=settings.LOYALTY_MIN_REDEEM,
+            points_to_cash_rate=settings.LOYALTY_POINTS_TO_CEDI,
         )
     return _balance_out(customer)
 
@@ -60,6 +64,7 @@ async def get_history(phone: str, limit: int = 50):
             lifetime_points_redeemed=0,
             cash_value=0.0,
             min_redeem_points=settings.LOYALTY_MIN_REDEEM,
+            points_to_cash_rate=settings.LOYALTY_POINTS_TO_CEDI,
         )
     )
 

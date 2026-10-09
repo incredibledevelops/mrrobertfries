@@ -16,6 +16,16 @@ from app.core.limiter import limiter
 from app.models import ALL_DOCUMENTS
 
 
+def _docs_enabled() -> bool:
+    """
+    Docs are enabled in development and any non-production env.
+    In production they must be explicitly opted-in via DEBUG=true.
+    """
+    if settings.APP_ENV != "production":
+        return True
+    return bool(settings.DEBUG)
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     await init_db(ALL_DOCUMENTS)
@@ -27,6 +37,8 @@ async def lifespan(application: FastAPI):
     await close_db()
 
 
+_show_docs = _docs_enabled()
+
 app = FastAPI(
     title=settings.APP_NAME,
     version="1.0.0",
@@ -34,9 +46,9 @@ app = FastAPI(
         "Backend API for Mr. Robert's Fries — loaded fries, custom bowls, "
         "orders, Paystack payments & analytics."
     ),
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/docs" if _show_docs else None,
+    redoc_url="/redoc" if _show_docs else None,
+    openapi_url="/openapi.json" if _show_docs else None,
     lifespan=lifespan,
 )
 
@@ -70,13 +82,15 @@ app.mount(
 
 @app.get("/", tags=["Health"])
 async def root():
-    return {
+    payload = {
         "name": settings.APP_NAME,
         "env": settings.APP_ENV,
         "status": "ok",
-        "docs": "/docs",
         "cache": cache.enabled,
     }
+    if _show_docs:
+        payload["docs"] = "/docs"
+    return payload
 
 
 @app.get("/health", tags=["Health"])

@@ -1,12 +1,15 @@
 import { API_URL } from "@/lib/api";
 
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
+// Cache metadata for 5 minutes. Metadata rarely changes and this avoids
+// hammering the API on every SSR.
+const REVALIDATE_SECONDS = 300;
 
 async function getItem(slug) {
   try {
     const res = await fetch(`${API_URL}/api/v1/menu/slug/${slug}`, {
-      cache: "no-store",
+      next: { revalidate: REVALIDATE_SECONDS },
     });
     if (!res.ok) return null;
     return res.json();
@@ -20,9 +23,7 @@ export async function generateMetadata({ params }) {
   const item = await getItem(slug);
 
   if (!item) {
-    return {
-      title: "Menu Item",
-    };
+    return { title: "Menu Item" };
   }
 
   const title = `${item.name} — GH₵ ${item.price.toFixed(2)}`;

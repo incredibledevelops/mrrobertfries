@@ -219,6 +219,31 @@ async def list_orders(
     return [_to_out(o) for o in orders]
 
 
+# ---------------------------------------------------------------------------
+# IMPORTANT: static / literal paths must be declared BEFORE /{order_id}
+# otherwise FastAPI's declaration-order routing will shadow them.
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/misc/riders",
+    dependencies=[Depends(get_current_staff_or_admin)],
+)
+async def list_riders():
+    riders = await User.find(User.role == UserRole.RIDER).to_list()
+    return [
+        {
+            "id": str(r.id),
+            "full_name": r.full_name,
+            "phone": r.phone,
+            "vehicle": r.vehicle,
+            "plate_number": r.plate_number,
+            "is_active": r.is_active,
+            "branch_id": str(r.branch_id) if r.branch_id else None,
+        }
+        for r in riders
+    ]
+
+
 @router.get("/{order_id}", response_model=OrderOut)
 async def get_order(order_id: str, _=Depends(get_current_staff_or_admin)):
     order = await order_crud.get_order(order_id)
@@ -237,14 +262,16 @@ async def update_status(order_id: str, payload: OrderStatusUpdate):
     if not order:
         raise HTTPException(404, "Order not found")
 
-    if order.status in (OrderStatus.DELIVERED, OrderStatus.CANCELLED) \
-            and payload.status != order.status:
+    if (
+        order.status in (OrderStatus.DELIVERED, OrderStatus.CANCELLED)
+        and payload.status != order.status
+    ):
         raise HTTPException(
             400,
             f"Cannot change status once order is '{order.status.value}'",
         )
 
-        order = await order_crud.update_order_status(
+    order = await order_crud.update_order_status(
         order, payload.status, note=payload.note
     )
 
@@ -252,7 +279,9 @@ async def update_status(order_id: str, payload: OrderStatusUpdate):
     from app.core.ws import broadcast_order_event
     from app.api.v1.routers.kitchen import _to_kitchen
     try:
-        await broadcast_order_event("order.updated", _to_kitchen(order).model_dump())
+        await broadcast_order_event(
+            "order.updated", _to_kitchen(order).model_dump()
+        )
     except Exception:
         pass
 
@@ -290,23 +319,3 @@ async def assign_rider(order_id: str, payload: OrderAssignRider):
 
     order = await order_crud.assign_rider(order, rider)
     return _to_out(order)
-
-
-@router.get(
-    "/misc/riders",
-    dependencies=[Depends(get_current_staff_or_admin)],
-)
-async def list_riders():
-    riders = await User.find(User.role == UserRole.RIDER).to_list()
-    return [
-        {
-            "id": str(r.id),
-            "full_name": r.full_name,
-            "phone": r.phone,
-            "vehicle": r.vehicle,
-            "plate_number": r.plate_number,
-            "is_active": r.is_active,
-            "branch_id": str(r.branch_id) if r.branch_id else None,
-        }
-        for r in riders
-    ]

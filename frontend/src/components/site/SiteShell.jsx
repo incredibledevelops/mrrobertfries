@@ -13,8 +13,8 @@ import CheckoutModal from "./CheckoutModal";
 const HIDE_CHROME_ON = ["/kitchen", "/rider", "/admin"];
 
 export default function SiteShell({ children }) {
-  const pathname = usePathname();
-  const hideChrome = HIDE_CHROME_ON.some((p) => pathname?.startsWith(p));
+  const pathname = usePathname() || "";
+  const hideChrome = HIDE_CHROME_ON.some((p) => pathname.startsWith(p));
 
   if (hideChrome) return children;
 

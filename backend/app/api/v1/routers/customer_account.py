@@ -249,8 +249,36 @@ async def toggle_favorite(
     if not item:
         raise HTTPException(404, "Menu item not found")
 
-    current, is_fav = await customer_crud.toggle_favorite(current, menu_item_id)
+    try:
+        current, is_fav = await customer_crud.toggle_favorite(
+            current, menu_item_id
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
     return FavoriteToggleOut(
         is_favorite=is_fav,
         message="Added to favorites" if is_fav else "Removed from favorites",
+    )
+
+
+@router.delete("/favorites/{menu_item_id}", response_model=FavoriteToggleOut)
+async def remove_favorite(
+    menu_item_id: str,
+    current: Customer = Depends(get_current_customer),
+):
+    """
+    Idempotent removal. If the item isn't in favorites, returns is_favorite=False
+    without error, so the frontend can call this safely on any item.
+    """
+    try:
+        current, is_fav = await customer_crud.remove_favorite(
+            current, menu_item_id
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return FavoriteToggleOut(
+        is_favorite=is_fav,
+        message="Removed from favorites",
     )

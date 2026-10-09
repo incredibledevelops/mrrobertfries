@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  Heart,
+  Star,
+  ShoppingBag,
+  Utensils,
+  ArrowRight,
+  AlertCircle,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 import {
   getCustomerToken,
@@ -12,16 +20,8 @@ import {
 import { AccountHeader } from "../page";
 import { SkeletonBlock, SkeletonLine } from "@/components/Skeleton";
 
-/* ------------------------------------------------------------------ */
-/*  config — change these if your API shape differs                    */
-/* ------------------------------------------------------------------ */
 const REMOVE_METHOD = "DELETE";
-const REMOVE_PATH = (id) =>
-  `${API_URL}/api/v1/customer-account/favorites/${id}`;
-
-/* ------------------------------------------------------------------ */
-/*  helpers                                                            */
-/* ------------------------------------------------------------------ */
+const REMOVE_PATH = (id) => `${API_URL}/api/v1/customer-account/favorites/${id}`;
 
 function formatGHS(value) {
   const n = Number(value);
@@ -42,20 +42,12 @@ async function readJson(res) {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  small UI bits                                                      */
-/* ------------------------------------------------------------------ */
-
 function ImageWithFallback({ src, alt, className }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) {
     return (
-      <div
-        className={`${className} flex items-center justify-center bg-gray-800 text-gray-500 text-3xl`}
-        aria-label={alt}
-        role="img"
-      >
-        🍟
+      <div className={`${className} flex items-center justify-center bg-gray-800`} role="img" aria-label={alt}>
+        <Utensils className="w-10 h-10 text-gray-600" />
       </div>
     );
   }
@@ -73,16 +65,11 @@ function ImageWithFallback({ src, alt, className }) {
 
 function Toast({ toast }) {
   if (!toast) return null;
-  const styles =
-    toast.type === "error"
-      ? "bg-red-950/90 border-red-700 text-red-200"
-      : "bg-emerald-950/90 border-emerald-700 text-emerald-200";
+  const styles = toast.type === "error"
+    ? "bg-red-950/90 border-red-700 text-red-200"
+    : "bg-emerald-950/90 border-emerald-700 text-emerald-200";
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${styles}`}
-    >
+    <div role="status" aria-live="polite" className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${styles}`}>
       {toast.message}
     </div>
   );
@@ -90,16 +77,9 @@ function Toast({ toast }) {
 
 function FavoritesGridSkeleton({ count = 4 }) {
   return (
-    <div
-      role="status"
-      aria-label="Loading favorites"
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-    >
+    <div role="status" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          className="bg-brand-card border border-gray-700 rounded-2xl overflow-hidden"
-        >
+        <div key={i} className="bg-brand-card border border-gray-700 rounded-2xl overflow-hidden">
           <SkeletonBlock className="h-40 rounded-none" />
           <div className="p-5 space-y-3">
             <SkeletonLine className="h-5 w-3/4" />
@@ -114,10 +94,6 @@ function FavoritesGridSkeleton({ count = 4 }) {
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  page                                                               */
-/* ------------------------------------------------------------------ */
 
 export default function FavoritesPage() {
   const router = useRouter();
@@ -137,12 +113,8 @@ export default function FavoritesPage() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2800);
   }, []);
-  useEffect(
-    () => () => toastTimer.current && clearTimeout(toastTimer.current),
-    []
-  );
+  useEffect(() => () => toastTimer.current && clearTimeout(toastTimer.current), []);
 
-  /* ---------- load profile + favorites ---------- */
   useEffect(() => {
     if (!getCustomerToken()) {
       router.replace("/account");
@@ -168,10 +140,7 @@ export default function FavoritesPage() {
           throw new Error("Couldn't load your favorites.");
         }
 
-        const [me, favs] = await Promise.all([
-          readJson(meRes),
-          readJson(favRes),
-        ]);
+        const [me, favs] = await Promise.all([readJson(meRes), readJson(favRes)]);
         if (cancelled) return;
         setProfile(me);
         setFavorites(Array.isArray(favs) ? favs : []);
@@ -187,43 +156,33 @@ export default function FavoritesPage() {
     };
   }, [router, reloadKey]);
 
-  /* ---------- react to logout in another tab ---------- */
   useEffect(() => {
     function onStorage(e) {
-      if (
-        e.key === "mrf_customer_token" ||
-        e.key === "mrf_customer_refresh" ||
-        e.key === "mrf_customer_tokens"
-      ) {
-        if (!getCustomerToken()) router.replace("/account");
+      if (e.key?.startsWith("mrf_customer") && !getCustomerToken()) {
+        router.replace("/account");
       }
     }
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, [router]);
 
-  /* ---------- logout ---------- */
   const logout = useCallback(() => {
     clearCustomerTokens();
     router.push("/account");
   }, [router]);
 
-  /* ---------- remove favorite (optimistic) ---------- */
   const removeFavorite = useCallback(
     async (item) => {
       const id = item?.id;
       if (id == null) return;
       if (busyIds.has(id)) return;
 
-      // optimistic remove
       const prev = favorites;
       setFavorites((list) => list.filter((f) => f.id !== id));
       setBusyIds((s) => new Set(s).add(id));
 
       try {
-        const res = await customerFetch(REMOVE_PATH(id), {
-          method: REMOVE_METHOD,
-        });
+        const res = await customerFetch(REMOVE_PATH(id), { method: REMOVE_METHOD });
         if (res.status === 401) {
           clearCustomerTokens();
           router.replace("/account");
@@ -235,7 +194,6 @@ export default function FavoritesPage() {
         }
         showToast("Removed from favorites.");
       } catch (e) {
-        // rollback
         setFavorites(prev);
         showToast(e.message || "Couldn't remove favorite.", "error");
       } finally {
@@ -249,7 +207,6 @@ export default function FavoritesPage() {
     [favorites, busyIds, router, showToast]
   );
 
-  /* ---------- derived ---------- */
   const count = favorites.length;
   const summary = useMemo(() => {
     if (loading) return "Loading…";
@@ -257,20 +214,11 @@ export default function FavoritesPage() {
     return `${count} saved item${count === 1 ? "" : "s"}`;
   }, [loading, count]);
 
-  /* ================================================================ */
-  /*  RENDER                                                          */
-  /* ================================================================ */
-
   return (
     <div className="min-h-screen bg-brand-dark text-gray-100">
-      <AccountHeader
-        profile={profile}
-        onLogout={logout}
-        activeTab="/account/favorites"
-      />
+      <AccountHeader profile={profile} onLogout={logout} activeTab="/account/favorites" />
 
       <main className="max-w-5xl mx-auto p-6 space-y-5">
-        {/* Header */}
         <div className="flex items-end justify-between gap-3">
           <div>
             <h1 className="font-heading text-2xl font-extrabold text-white">
@@ -280,49 +228,42 @@ export default function FavoritesPage() {
           </div>
           {count > 0 && (
             <Link
-              href="/#menu"
-              className="hidden sm:inline-block px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold text-xs transition-colors"
+              href="/menu"
+              className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-bold text-xs transition-colors"
             >
+              <Utensils className="w-3.5 h-3.5" />
               Browse menu
             </Link>
           )}
         </div>
 
-        {/* Error */}
         {error && (
-          <div
-            role="alert"
-            className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-3"
-          >
+          <div role="alert" className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-3">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span className="flex-1">{error}</span>
-            <button
-              onClick={() => setReloadKey((k) => k + 1)}
-              className="text-xs font-bold underline hover:no-underline"
-            >
+            <button onClick={() => setReloadKey((k) => k + 1)} className="text-xs font-bold underline hover:no-underline">
               Retry
             </button>
           </div>
         )}
 
-        {/* Content */}
         {loading ? (
           <FavoritesGridSkeleton count={4} />
         ) : count === 0 ? (
           <div className="bg-brand-card border border-gray-700 rounded-2xl p-12 text-center">
-            <div className="text-5xl mb-3" aria-hidden="true">
-              ❤️
+            <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-4">
+              <Heart className="w-8 h-8 text-gray-600" />
             </div>
-            <h2 className="font-bold text-white text-lg">
-              No favorites yet
-            </h2>
+            <h2 className="font-bold text-white text-lg">No favorites yet</h2>
             <p className="text-gray-400 text-sm mt-1 max-w-md mx-auto">
               Tap the heart on any menu item to save it here. Favorites also
               appear automatically after your first order.
             </p>
             <Link
-              href="/#menu"
-              className="inline-block mt-5 px-5 py-2.5 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-bold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
+              href="/menu"
+              className="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-bold text-sm transition-colors"
             >
+              <Utensils className="w-4 h-4" />
               Explore the Menu
             </Link>
           </div>
@@ -335,26 +276,14 @@ export default function FavoritesPage() {
               return (
                 <div
                   key={item.id}
-                  aria-busy={busy}
-                  className={`bg-brand-card border border-gray-700 rounded-2xl overflow-hidden flex flex-col transition-all hover:border-brand-gold/60 ${
-                    busy ? "opacity-60" : ""
-                  }`}
+                  className={`bg-brand-card border border-gray-700 rounded-2xl overflow-hidden flex flex-col transition-all hover:border-brand-gold/60 hover:-translate-y-0.5 ${busy ? "opacity-60" : ""}`}
                 >
-                  <Link
-                    href={`/menu/${item.slug}`}
-                    className="block relative focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
-                  >
-                    <ImageWithFallback
-                      src={item.image_url}
-                      alt={item.name}
-                      className="w-full h-40 object-cover"
-                    />
+                  <Link href={`/menu/${item.slug}`} className="block relative">
+                    <ImageWithFallback src={item.image_url} alt={item.name} className="w-full h-40 object-cover" />
                     {reviews > 0 && (
-                      <div className="absolute top-3 left-3 bg-brand-dark/90 px-2 py-1 rounded-lg flex items-center gap-1 text-xs font-bold border border-gray-700">
-                        <span className="text-brand-gold">★</span>
-                        <span className="text-white">
-                          {rating.toFixed(1)}
-                        </span>
+                      <div className="absolute top-3 left-3 bg-brand-dark/90 backdrop-blur-sm px-2 py-1 rounded-lg inline-flex items-center gap-1 text-xs font-bold border border-gray-700">
+                        <Star className="w-3 h-3 text-brand-gold fill-brand-gold" />
+                        <span className="text-white">{rating.toFixed(1)}</span>
                         <span className="text-gray-500">({reviews})</span>
                       </div>
                     )}
@@ -364,7 +293,7 @@ export default function FavoritesPage() {
                     <div className="flex items-start justify-between gap-2">
                       <Link
                         href={`/menu/${item.slug}`}
-                        className="font-heading font-bold text-lg text-white hover:text-brand-gold transition-colors focus:outline-none"
+                        className="font-heading font-bold text-lg text-white hover:text-brand-gold transition-colors"
                       >
                         {item.name}
                       </Link>
@@ -372,13 +301,12 @@ export default function FavoritesPage() {
                         onClick={() => removeFavorite(item)}
                         disabled={busy}
                         aria-label={`Remove ${item.name} from favorites`}
-                        title="Remove from favorites"
-                        className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
+                        className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
                       >
                         {busy ? (
                           <span className="w-3.5 h-3.5 rounded-full border-2 border-red-400/40 border-t-red-400 animate-spin" />
                         ) : (
-                          "♥"
+                          <Heart className="w-4 h-4 fill-red-500" />
                         )}
                       </button>
                     </div>
@@ -395,9 +323,10 @@ export default function FavoritesPage() {
                       </div>
                       <Link
                         href={`/menu/${item.slug}`}
-                        className="px-4 py-2 rounded-lg bg-brand-gold hover:bg-brand-amber text-brand-dark text-xs font-extrabold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
+                        className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-brand-gold hover:bg-brand-amber text-brand-dark text-xs font-extrabold transition-colors"
                       >
-                        Order →
+                        <ShoppingBag className="w-3.5 h-3.5" />
+                        Order
                       </Link>
                     </div>
                   </div>

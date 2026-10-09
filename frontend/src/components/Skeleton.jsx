@@ -120,11 +120,7 @@ export function OrderTrackingSkeleton() {
 
 export function TableSkeleton({ rows = 5 }) {
   return (
-    <div
-      role="status"
-      aria-label="Loading table"
-      className="space-y-3"
-    >
+    <div role="status" aria-label="Loading table" className="space-y-3">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex gap-4 items-center">
           <SkeletonLine className="h-4 flex-1" />
@@ -142,6 +138,38 @@ export function StatCardSkeleton() {
     <div className="bg-brand-card border border-gray-700 rounded-2xl p-5 space-y-2">
       <SkeletonLine className="h-3 w-24" />
       <SkeletonLine className="h-7 w-32" />
+    </div>
+  );
+}
+
+/* ---------- new: page-level skeletons ---------- */
+
+export function PageHeaderSkeleton() {
+  return (
+    <div className="py-12 border-b border-gray-800">
+      <div className="max-w-7xl mx-auto px-4 space-y-4">
+        <SkeletonLine className="h-3 w-24" />
+        <SkeletonLine className="h-10 w-64" />
+        <SkeletonLine className="h-4 w-96 max-w-full" />
+      </div>
+    </div>
+  );
+}
+
+export function FormSkeleton({ rows = 4 }) {
+  return (
+    <div
+      role="status"
+      aria-label="Loading form"
+      className="bg-brand-card border border-gray-700 rounded-3xl p-6 space-y-4"
+    >
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="space-y-2">
+          <SkeletonLine className="h-3 w-24" />
+          <SkeletonBlock className="h-12 rounded-xl" />
+        </div>
+      ))}
+      <SkeletonBlock className="h-12 w-40 rounded-xl" />
     </div>
   );
 }

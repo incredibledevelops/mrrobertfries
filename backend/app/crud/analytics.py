@@ -91,6 +91,8 @@ async def daily_series(start: datetime, end: datetime) -> list[dict]:
         Order.created_at >= start, Order.created_at <= end
     ).to_list()
 
+    revenue_ids = {str(o.id) for o in _revenue_orders(orders)}
+
     buckets: dict[str, dict] = {}
     cursor = start.date()
     end_date = end.date()
@@ -104,13 +106,7 @@ async def daily_series(start: datetime, end: datetime) -> list[dict]:
         if key not in buckets:
             continue
         buckets[key]["orders"] += 1
-        if o.status in (
-            OrderStatus.PAID,
-            OrderStatus.PREPARING,
-            OrderStatus.READY,
-            OrderStatus.OUT_FOR_DELIVERY,
-            OrderStatus.DELIVERED,
-        ):
+        if str(o.id) in revenue_ids:
             buckets[key]["revenue"] += _safe_float(o.total)
 
     return [
@@ -128,18 +124,14 @@ async def hourly_series(start: datetime, end: datetime) -> list[dict]:
         Order.created_at >= start, Order.created_at <= end
     ).to_list()
 
+    revenue_ids = {str(o.id) for o in _revenue_orders(orders)}
+
     buckets = {h: {"hour": h, "orders": 0, "revenue": 0.0} for h in range(24)}
 
     for o in orders:
         h = o.created_at.hour
         buckets[h]["orders"] += 1
-        if o.status in (
-            OrderStatus.PAID,
-            OrderStatus.PREPARING,
-            OrderStatus.READY,
-            OrderStatus.OUT_FOR_DELIVERY,
-            OrderStatus.DELIVERED,
-        ):
+        if str(o.id) in revenue_ids:
             buckets[h]["revenue"] += _safe_float(o.total)
 
     return [
@@ -160,7 +152,6 @@ async def status_breakdown(start: datetime, end: datetime) -> list[dict]:
 
     counts: dict[str, int] = {}
     for o in orders:
-        # Be defensive — some orders may have a status that isn't in the enum
         key = (
             o.status.value
             if hasattr(o.status, "value")
@@ -265,16 +256,22 @@ async def top_sellers(
 async def top_promos(
     start: datetime, end: datetime, limit: int = 5
 ) -> list[dict]:
+    # Mongo has no `$ne: null` on the doc field here in the Beanie query
+    # syntax; `promo_code` is optional and its absence is semantically
+    # equivalent to null. Use the raw dict form so the query is explicit.
     orders = await Order.find(
-        Order.created_at >= start,
-        Order.created_at <= end,
-        Order.promo_code != None,  # noqa: E711
-        Order.status != OrderStatus.CANCELLED,
+        {
+            "created_at": {"$gte": start, "$lte": end},
+            "promo_code": {"$exists": True, "$ne": None},
+            "status": {"$ne": OrderStatus.CANCELLED.value},
+        }
     ).to_list()
 
     tally: dict[str, dict] = {}
     for o in orders:
         code = getattr(o, "promo_code", None) or ""
+        if not code:
+            continue
         row = tally.setdefault(
             code, {"code": code, "times_used": 0, "discount_given": 0.0}
         )
@@ -300,6 +297,8 @@ async def top_zones(
         Order.status != OrderStatus.CANCELLED,
     ).to_list()
 
+    revenue_ids = {str(o.id) for o in _revenue_orders(orders)}
+
     tally: dict[str, dict] = {}
     for o in orders:
         key = getattr(o, "delivery_zone_name", None) or "Unknown zone"
@@ -307,13 +306,7 @@ async def top_zones(
             key, {"zone": key, "orders": 0, "revenue": 0.0}
         )
         row["orders"] += 1
-        if o.status in (
-            OrderStatus.PAID,
-            OrderStatus.PREPARING,
-            OrderStatus.READY,
-            OrderStatus.OUT_FOR_DELIVERY,
-            OrderStatus.DELIVERED,
-        ):
+        if str(o.id) in revenue_ids:
             row["revenue"] += _safe_float(o.total)
 
     top = sorted(

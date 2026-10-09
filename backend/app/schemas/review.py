@@ -12,6 +12,12 @@ class ReviewCreate(BaseModel):
     photo_urls: List[str] = []
 
 
+class ReviewModerateIn(BaseModel):
+    """Admin moderation body — both fields optional, only set ones applied."""
+    is_published: Optional[bool] = None
+    is_featured: Optional[bool] = None
+
+
 class ReviewOut(BaseModel):
     id: str
     order_reference: str

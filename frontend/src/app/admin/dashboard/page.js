@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   LineChart,
@@ -17,6 +17,13 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import {
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 import {
   TableSkeleton,
@@ -44,15 +51,83 @@ const STATUS_COLORS = {
 
 const CHART_COLORS = ["#F59E0B", "#D97706", "#DC2626", "#10B981", "#3B82F6"];
 
+// Full order status set for the admin status dropdown. Include every
+// OrderStatus the backend understands.
+const ORDER_STATUS_OPTIONS = [
+  "pending",
+  "paid",
+  "preparing",
+  "ready",
+  "out_for_delivery",
+  "delivered",
+  "cancelled",
+  "failed",
+];
+
+const ORDERS_PAGE_SIZE = 25;
+
+function Toast({ toast }) {
+  if (!toast) return null;
+  const isError = toast.type === "error";
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur flex items-center gap-2 ${
+        isError
+          ? "bg-red-950/90 border-red-700 text-red-200"
+          : "bg-emerald-950/90 border-emerald-700 text-emerald-200"
+      }`}
+    >
+      {isError ? (
+        <XCircle className="w-4 h-4" />
+      ) : (
+        <CheckCircle2 className="w-4 h-4" />
+      )}
+      {toast.message}
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [token, setToken] = useState(null);
   const [orders, setOrders] = useState([]);
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [ordersSkip, setOrdersSkip] = useState(0);
   const [overview, setOverview] = useState(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [error, setError] = useState("");
   const [days, setDays] = useState(30);
+  const [toast, setToast] = useState(null);
+
+  const showToast = useCallback((message, type = "success") => {
+    setToast({ message, type });
+    const t = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(t);
+  }, []);
+
+  const loadOrders = useCallback(async (t, skip) => {
+    setLoadingOrders(true);
+    try {
+      const res = await fetch(
+        `${API_URL}/api/v1/orders?limit=${ORDERS_PAGE_SIZE}&skip=${skip}`,
+        { headers: { Authorization: `Bearer ${t}` } }
+      );
+      if (!res.ok) throw new Error("Could not load orders");
+      const data = await res.json();
+      setOrders(Array.isArray(data) ? data : []);
+      // If the response is shorter than the page size, we've reached the end.
+      // Track a lower bound for "total" as page-size * page count.
+      setOrdersSkip(skip);
+      setOrdersTotal(skip + (Array.isArray(data) ? data.length : 0));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, []);
 
   useEffect(() => {
     const t = localStorage.getItem("mrf_token");
@@ -61,61 +136,71 @@ export default function AdminDashboard() {
       return;
     }
     setToken(t);
-    loadOrders(t);
-  }, []);
+    loadOrders(t, 0);
+  }, [router, loadOrders]);
 
   useEffect(() => {
     if (!token) return;
-    loadStats(token, days);
+    let cancelled = false;
+    (async () => {
+      setLoadingStats(true);
+      try {
+        const res = await fetch(
+          `${API_URL}/api/v1/analytics/overview?days=${days}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) throw new Error("Could not load analytics");
+        const data = await res.json();
+        if (!cancelled) setOverview(data);
+      } catch (e) {
+        if (!cancelled) setError(e.message);
+      } finally {
+        if (!cancelled) setLoadingStats(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [token, days]);
 
-  async function loadStats(t, d) {
-    setLoadingStats(true);
-    try {
-      const res = await fetch(
-        `${API_URL}/api/v1/analytics/overview?days=${d}`,
-        { headers: { Authorization: `Bearer ${t}` } }
-      );
-      if (!res.ok) throw new Error("Could not load analytics");
-      setOverview(await res.json());
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoadingStats(false);
-    }
-  }
+  const updateStatus = useCallback(
+    async (orderId, status) => {
+      try {
+        const res = await fetch(
+          `${API_URL}/api/v1/orders/${orderId}/status`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ status }),
+          }
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to update");
+        }
+        const updated = await res.json();
+        setOrders((prev) =>
+          prev.map((o) => (o.id === updated.id ? updated : o))
+        );
+        showToast("Status updated.");
+      } catch (e) {
+        showToast(e.message, "error");
+      }
+    },
+    [token, showToast]
+  );
 
-  async function loadOrders(t) {
-    try {
-      const res = await fetch(`${API_URL}/api/v1/orders?limit=100`, {
-        headers: { Authorization: `Bearer ${t}` },
-      });
-      if (!res.ok) throw new Error("Could not load orders");
-      setOrders(await res.json());
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoadingOrders(false);
-    }
-  }
-
-  async function updateStatus(orderId, status) {
-    try {
-      const res = await fetch(`${API_URL}/api/v1/orders/${orderId}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error("Failed to update");
-      const updated = await res.json();
-      setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
-    } catch (e) {
-      alert(e.message);
-    }
-  }
+  const goToPage = useCallback(
+    (delta) => {
+      if (!token) return;
+      const next = Math.max(0, ordersSkip + delta * ORDERS_PAGE_SIZE);
+      loadOrders(token, next);
+    },
+    [token, ordersSkip, loadOrders]
+  );
 
   // Recharts axis coloring
   const axisProps = {
@@ -130,6 +215,10 @@ export default function AdminDashboard() {
     borderRadius: 12,
     color: "#F9FAFB",
   };
+
+  const pageNumber = Math.floor(ordersSkip / ORDERS_PAGE_SIZE) + 1;
+  const canGoPrev = ordersSkip > 0;
+  const canGoNext = orders.length === ORDERS_PAGE_SIZE;
 
   return (
     <div>
@@ -161,7 +250,8 @@ export default function AdminDashboard() {
       </div>
 
       {error && (
-        <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+        <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           {error}
         </div>
       )}
@@ -470,14 +560,41 @@ export default function AdminDashboard() {
 
       {/* Recent orders table */}
       <div className="bg-brand-card border border-gray-700 rounded-2xl p-6">
-        <h2 className="font-heading text-lg font-bold text-white mb-4">
-          Recent Orders
-        </h2>
+        <div className="flex items-center justify-between mb-4 gap-3">
+          <h2 className="font-heading text-lg font-bold text-white">
+            Recent Orders
+          </h2>
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <button
+              onClick={() => goToPage(-1)}
+              disabled={!canGoPrev || loadingOrders}
+              aria-label="Previous page"
+              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="font-bold">
+              Page {pageNumber}
+            </span>
+            <button
+              onClick={() => goToPage(1)}
+              disabled={!canGoNext || loadingOrders}
+              aria-label="Next page"
+              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
 
         {loadingOrders ? (
           <TableSkeleton rows={6} />
         ) : orders.length === 0 ? (
-          <p className="text-gray-500 text-sm">No orders yet.</p>
+          <p className="text-gray-500 text-sm">
+            {ordersSkip === 0
+              ? "No orders yet."
+              : "No more orders on this page."}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -530,13 +647,11 @@ export default function AdminDashboard() {
                         onChange={(e) => updateStatus(o.id, e.target.value)}
                         className="bg-brand-dark border border-gray-700 text-xs text-white rounded-lg px-2 py-1"
                       >
-                        <option value="pending">pending</option>
-                        <option value="paid">paid</option>
-                        <option value="preparing">preparing</option>
-                        <option value="ready">ready</option>
-                        <option value="out_for_delivery">out_for_delivery</option>
-                        <option value="delivered">delivered</option>
-                        <option value="cancelled">cancelled</option>
+                        {ORDER_STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
                       </select>
                     </td>
                   </tr>
@@ -546,6 +661,8 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      <Toast toast={toast} />
     </div>
   );
 }

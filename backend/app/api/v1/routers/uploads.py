@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 
-from app.core.deps import get_current_admin
+from app.core.deps import get_current_admin, get_current_customer
+from app.models.customer import Customer
 from app.schemas.upload import UploadOut
 from app.utils.file_storage import save_upload
 
@@ -18,4 +19,21 @@ async def upload_image(
     subdir: str = Form("menu"),  # menu | categories | builder
 ):
     result = await save_upload(file, subdir=subdir)
+    return UploadOut(**result)
+
+
+@router.post(
+    "/customer",
+    response_model=UploadOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_customer_image(
+    file: UploadFile = File(...),
+    current: Customer = Depends(get_current_customer),
+):
+    """
+    Upload a review photo as a signed-in customer.
+    Enforced to the `menu` subdir; separate from admin uploads.
+    """
+    result = await save_upload(file, subdir="menu")
     return UploadOut(**result)

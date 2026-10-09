@@ -2,7 +2,52 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  User,
+  Mail,
+  Phone,
+  Shield,
+  Building2,
+  Eye,
+  EyeOff,
+  Save,
+  Key,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
+
+const TOKEN_KEY = "mrf_token";
+const TOKEN_ISSUED_AT_KEY = "mrf_token_issued_at";
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getAdminToken() {
+  if (typeof window === "undefined") return null;
+  try {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return null;
+    const issuedAt = Number(localStorage.getItem(TOKEN_ISSUED_AT_KEY) || 0);
+    if (issuedAt && Date.now() - issuedAt > SESSION_MAX_AGE_MS) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_ISSUED_AT_KEY);
+      return null;
+    }
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="block text-xs font-bold text-gray-300 mb-1">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export default function AdminProfile() {
   const router = useRouter();
@@ -23,16 +68,17 @@ export default function AdminProfile() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [pwMessage, setPwMessage] = useState("");
   const [pwError, setPwError] = useState("");
+  const [changingPw, setChangingPw] = useState(false);
 
   useEffect(() => {
-    const t = localStorage.getItem("mrf_token");
+    const t = getAdminToken();
     if (!t) {
-      router.push("/admin");
+      router.replace("/admin");
       return;
     }
     setToken(t);
     load(t);
-  }, []);
+  }, [router]);
 
   async function load(t) {
     setLoading(true);
@@ -100,6 +146,7 @@ export default function AdminProfile() {
       return;
     }
 
+    setChangingPw(true);
     try {
       const res = await fetch(`${API_URL}/api/v1/auth/me/change-password`, {
         method: "POST",
@@ -123,6 +170,8 @@ export default function AdminProfile() {
       setTimeout(() => setPwMessage(""), 3000);
     } catch (err) {
       setPwError(err.message);
+    } finally {
+      setChangingPw(false);
     }
   }
 
@@ -148,26 +197,32 @@ export default function AdminProfile() {
         </p>
       </div>
 
-      {/* Info banner */}
       <div className="bg-brand-card border border-gray-700 rounded-2xl p-5 mb-6 flex items-center gap-4">
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-gold to-brand-crimson flex items-center justify-center text-brand-dark font-black text-xl">
           {me?.full_name?.slice(0, 2).toUpperCase()}
         </div>
         <div className="flex-1">
-          <div className="font-bold text-white">{me?.full_name}</div>
-          <div className="text-xs text-gray-400">{me?.email}</div>
-          <div className="flex gap-2 mt-1">
-            <span className="text-[10px] px-2 py-0.5 rounded bg-brand-gold/20 text-brand-gold font-bold uppercase">
+          <div className="font-bold text-white flex items-center gap-2">
+            <User className="w-4 h-4 text-gray-400" />
+            {me?.full_name}
+          </div>
+          <div className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+            <Mail className="w-3 h-3" />
+            {me?.email}
+          </div>
+          <div className="flex gap-2 mt-1.5">
+            <span className="text-[10px] px-2 py-0.5 rounded bg-brand-gold/20 text-brand-gold font-bold uppercase flex items-center gap-1">
+              <Shield className="w-3 h-3" />
               {me?.role}
             </span>
-            <span className="text-[10px] px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-bold">
+            <span className="text-[10px] px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-bold flex items-center gap-1">
+              <Building2 className="w-3 h-3" />
               {branchName(me?.branch_id)}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Profile edit */}
       <form
         onSubmit={saveProfile}
         className="bg-brand-card border border-gray-700 rounded-2xl p-6 space-y-4 mb-6"
@@ -177,12 +232,14 @@ export default function AdminProfile() {
         </h2>
 
         {error && (
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             {error}
           </div>
         )}
         {message && (
-          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs">
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
             {message}
           </div>
         )}
@@ -192,7 +249,7 @@ export default function AdminProfile() {
             required
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm"
+            className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/40 outline-none"
           />
         </Field>
 
@@ -201,7 +258,7 @@ export default function AdminProfile() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="024XXXXXXX"
-            className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm"
+            className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/40 outline-none"
           />
         </Field>
 
@@ -216,28 +273,31 @@ export default function AdminProfile() {
         <button
           type="submit"
           disabled={saving}
-          className="px-6 py-3 rounded-xl bg-brand-gold text-brand-dark font-extrabold text-sm disabled:opacity-50"
+          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm disabled:opacity-50 transition-colors"
         >
+          <Save className="w-4 h-4" />
           {saving ? "Saving…" : "Save Changes"}
         </button>
       </form>
 
-      {/* Password change */}
       <form
         onSubmit={changePassword}
         className="bg-brand-card border border-gray-700 rounded-2xl p-6 space-y-4"
       >
-        <h2 className="font-heading text-lg font-bold text-white">
+        <h2 className="font-heading text-lg font-bold text-white flex items-center gap-2">
+          <Key className="w-5 h-5 text-brand-gold" />
           Change Password
         </h2>
 
         {pwError && (
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             {pwError}
           </div>
         )}
         {pwMessage && (
-          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs">
+          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
             {pwMessage}
           </div>
         )}
@@ -248,7 +308,7 @@ export default function AdminProfile() {
             type="password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm"
+            className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/40 outline-none"
           />
         </Field>
 
@@ -260,14 +320,19 @@ export default function AdminProfile() {
               type={showPassword ? "text" : "password"}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-4 py-3 pr-12 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm"
+              className="w-full px-4 py-3 pr-12 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/40 outline-none"
             />
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute inset-y-0 right-2 my-auto w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white"
+              className="absolute inset-y-0 right-2 my-auto w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-gold/40"
+              aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {showPassword ? "🙈" : "👁"}
+              {showPassword ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
             </button>
           </div>
         </Field>
@@ -279,28 +344,19 @@ export default function AdminProfile() {
             type={showPassword ? "text" : "password"}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm"
+            className="w-full px-4 py-3 rounded-xl bg-brand-dark border border-gray-700 text-white text-sm focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/40 outline-none"
           />
         </Field>
 
         <button
           type="submit"
-          className="px-6 py-3 rounded-xl bg-brand-gold text-brand-dark font-extrabold text-sm"
+          disabled={changingPw}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm disabled:opacity-50 transition-colors"
         >
-          Change Password
+          <Key className="w-4 h-4" />
+          {changingPw ? "Changing…" : "Change Password"}
         </button>
       </form>
-    </div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <div>
-      <label className="block text-xs font-bold text-gray-300 mb-1">
-        {label}
-      </label>
-      {children}
     </div>
   );
 }

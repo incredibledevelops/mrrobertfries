@@ -2,12 +2,27 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Search,
+  X,
+  AlertCircle,
+  RefreshCw,
+  Ticket,
+  Check,
+  XCircle,
+  Pause,
+  Hourglass,
+  Flame,
+  Copy,
+  Dice5,
+  Power,
+  PowerOff,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { SkeletonBlock, SkeletonLine } from "@/components/Skeleton";
-
-/* ------------------------------------------------------------------ */
-/*  constants                                                          */
-/* ------------------------------------------------------------------ */
 
 const TOKEN_KEY = "mrf_token";
 const TOKEN_ISSUED_AT_KEY = "mrf_token_issued_at";
@@ -30,10 +45,6 @@ const EMPTY_FORM = {
 };
 
 const SUGGESTED_CODES = ["WELCOME10", "FRIES20", "MOMO15", "WEEKEND5"];
-
-/* ------------------------------------------------------------------ */
-/*  helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 function getAdminToken() {
   if (typeof window === "undefined") return null;
@@ -103,7 +114,6 @@ function toLocalInput(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  // Convert to local YYYY-MM-DDTHH:MM for datetime-local input
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
     d.getDate()
@@ -135,43 +145,40 @@ const STATUS_META = {
     label: "Active",
     color: "text-emerald-400",
     bg: "bg-emerald-500/15 border-emerald-500/30",
-    emoji: "✅",
+    Icon: Check,
   },
   disabled: {
     label: "Disabled",
     color: "text-red-400",
     bg: "bg-red-500/15 border-red-500/30",
-    emoji: "⏸",
+    Icon: Pause,
   },
   expired: {
     label: "Expired",
     color: "text-gray-400",
     bg: "bg-gray-500/15 border-gray-500/30",
-    emoji: "⌛",
+    Icon: Hourglass,
   },
   exhausted: {
     label: "Exhausted",
     color: "text-amber-400",
     bg: "bg-amber-500/15 border-amber-500/30",
-    emoji: "🔥",
+    Icon: Flame,
   },
 };
 
-/* ------------------------------------------------------------------ */
-/*  UI primitives                                                      */
-/* ------------------------------------------------------------------ */
-
 function Toast({ toast }) {
   if (!toast) return null;
-  const styles =
-    toast.type === "error"
-      ? "bg-red-950/90 border-red-700 text-red-200"
-      : "bg-emerald-950/90 border-emerald-700 text-emerald-200";
+  const isError = toast.type === "error";
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${styles}`}
+      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${
+        isError
+          ? "bg-red-950/90 border-red-700 text-red-200"
+          : "bg-emerald-950/90 border-emerald-700 text-emerald-200"
+      }`}
     >
       {toast.message}
     </div>
@@ -260,11 +267,12 @@ function Modal({ children, onClose, labelledBy, disableClose = false }) {
 
 function StatusBadge({ status }) {
   const meta = STATUS_META[status] || STATUS_META.active;
+  const Icon = meta.Icon;
   return (
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold uppercase tracking-wide ${meta.color} ${meta.bg}`}
     >
-      <span aria-hidden="true">{meta.emoji}</span>
+      <Icon className="w-3 h-3" />
       {meta.label}
     </span>
   );
@@ -301,10 +309,6 @@ function PromoGridSkeleton({ count = 6 }) {
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  page                                                               */
-/* ------------------------------------------------------------------ */
 
 export default function AdminPromoCodes() {
   const router = useRouter();
@@ -343,7 +347,6 @@ export default function AdminPromoCodes() {
     []
   );
 
-  /* ---------- auth ---------- */
   useEffect(() => {
     const t = getAdminToken();
     if (!t) {
@@ -362,7 +365,6 @@ export default function AdminPromoCodes() {
     return () => window.removeEventListener("storage", onStorage);
   }, [router]);
 
-  /* ---------- authed fetch ---------- */
   const authFetch = useCallback(
     async (url, init = {}) => {
       const headers = {
@@ -380,7 +382,6 @@ export default function AdminPromoCodes() {
     [token, router]
   );
 
-  /* ---------- load ---------- */
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -402,7 +403,6 @@ export default function AdminPromoCodes() {
     load();
   }, [token, reloadKey, load]);
 
-  /* ---------- form open/close ---------- */
   const openCreate = useCallback(() => {
     setForm({ ...EMPTY_FORM });
     setEditing(null);
@@ -435,7 +435,6 @@ export default function AdminPromoCodes() {
     setForm((f) => ({ ...f, code: `${base}${suffix}` }));
   }, []);
 
-  /* ---------- validation ---------- */
   const validation = useMemo(() => {
     const errs = {};
     const code = form.code.trim().toUpperCase();
@@ -493,18 +492,11 @@ export default function AdminPromoCodes() {
         errs.valid_until = "Must be after the start date.";
       }
     }
-    if (
-      form.valid_until &&
-      new Date(form.valid_until).getTime() < Date.now()
-    ) {
-      // Not an error, just a warning surfaced elsewhere
-    }
     return errs;
   }, [form]);
 
   const formValid = Object.keys(validation).length === 0;
 
-  /* ---------- discount preview ---------- */
   const discountPreview = useMemo(() => {
     if (form.discount_type === "free_delivery") {
       return "Free delivery on qualifying orders";
@@ -527,7 +519,6 @@ export default function AdminPromoCodes() {
     return `On a ${formatGHS(sampleOrder)} order → ${formatGHS(discount)} off`;
   }, [form]);
 
-  /* ---------- save ---------- */
   const handleSave = useCallback(
     async (e) => {
       e.preventDefault();
@@ -590,7 +581,6 @@ export default function AdminPromoCodes() {
     [form, formValid, editing, authFetch, showToast]
   );
 
-  /* ---------- delete ---------- */
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     const promo = deleteTarget;
@@ -620,7 +610,6 @@ export default function AdminPromoCodes() {
     }
   }, [deleteTarget, authFetch, showToast]);
 
-  /* ---------- toggle active (optimistic) ---------- */
   const toggleActive = useCallback(
     async (promo) => {
       if (busyIds.has(promo.id)) return;
@@ -666,7 +655,6 @@ export default function AdminPromoCodes() {
     [promos, busyIds, authFetch, showToast]
   );
 
-  /* ---------- copy code ---------- */
   const copyCode = useCallback(
     async (code) => {
       try {
@@ -691,7 +679,6 @@ export default function AdminPromoCodes() {
     [showToast]
   );
 
-  /* ---------- derived ---------- */
   const counts = useMemo(() => {
     const c = { all: promos.length, active: 0, disabled: 0, expired: 0, exhausted: 0 };
     for (const p of promos) c[getStatus(p)]++;
@@ -711,7 +698,6 @@ export default function AdminPromoCodes() {
           p.description?.toLowerCase().includes(q)
       );
     }
-    // Sort: active first, then by creation date desc (fallback: id)
     return [...list].sort((a, b) => {
       const aActive = a.is_active && !isExpired(a) && !isExhausted(a);
       const bActive = b.is_active && !isExpired(b) && !isExhausted(b);
@@ -722,7 +708,6 @@ export default function AdminPromoCodes() {
     });
   }, [promos, statusFilter, query]);
 
-  /* ---------- render guard ---------- */
   if (!authChecked || !token) {
     return (
       <div>
@@ -734,7 +719,6 @@ export default function AdminPromoCodes() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="font-heading text-3xl font-extrabold text-white">
@@ -746,19 +730,17 @@ export default function AdminPromoCodes() {
         </div>
         <button
           onClick={openCreate}
-          className="px-5 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
         >
-          + New Promo
+          <Plus className="w-4 h-4" />
+          New Promo
         </button>
       </div>
 
-      {/* Search + filters */}
       {!loading && promos.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-6">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
-              🔍
-            </span>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -773,10 +755,10 @@ export default function AdminPromoCodes() {
           >
             {[
               { key: "all", label: `All (${counts.all})` },
-              { key: "active", label: `✅ ${counts.active}` },
-              { key: "disabled", label: `⏸ ${counts.disabled}` },
-              { key: "expired", label: `⌛ ${counts.expired}` },
-              { key: "exhausted", label: `🔥 ${counts.exhausted}` },
+              { key: "active", label: `${counts.active} Active`, Icon: Check },
+              { key: "disabled", label: `${counts.disabled}`, Icon: Pause },
+              { key: "expired", label: `${counts.expired}`, Icon: Hourglass },
+              { key: "exhausted", label: `${counts.exhausted}`, Icon: Flame },
             ].map((f) => (
               <button
                 key={f.key}
@@ -784,12 +766,13 @@ export default function AdminPromoCodes() {
                 aria-selected={statusFilter === f.key}
                 onClick={() => setStatusFilter(f.key)}
                 disabled={counts[f.key] === 0 && f.key !== "all"}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/40 disabled:opacity-40 disabled:cursor-not-allowed ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/40 disabled:opacity-40 disabled:cursor-not-allowed ${
                   statusFilter === f.key
                     ? "bg-brand-gold text-brand-dark"
                     : "text-gray-400 hover:text-white"
                 }`}
               >
+                {f.Icon && <f.Icon className="w-3.5 h-3.5" />}
                 {f.label}
               </button>
             ))}
@@ -797,30 +780,28 @@ export default function AdminPromoCodes() {
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div
           role="alert"
           className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-3"
         >
+          <AlertCircle className="w-5 h-5 shrink-0" />
           <span className="flex-1">{error}</span>
           <button
             onClick={() => setReloadKey((k) => k + 1)}
-            className="text-xs font-bold underline hover:no-underline"
+            className="flex items-center gap-1 text-xs font-bold underline hover:no-underline"
           >
+            <RefreshCw className="w-3 h-3" />
             Retry
           </button>
         </div>
       )}
 
-      {/* Content */}
       {loading ? (
         <PromoGridSkeleton count={6} />
       ) : promos.length === 0 ? (
         <div className="bg-brand-card border border-gray-700 rounded-2xl p-12 text-center">
-          <div className="text-5xl mb-3" aria-hidden="true">
-            🎟️
-          </div>
+          <Ticket className="w-12 h-12 text-gray-600 mx-auto mb-3" />
           <h2 className="font-bold text-white text-lg">No promo codes yet</h2>
           <p className="text-gray-400 text-sm mt-1 max-w-sm mx-auto">
             Create discount codes to reward customers and boost orders.
@@ -876,9 +857,10 @@ export default function AdminPromoCodes() {
                     <button
                       onClick={() => copyCode(promo.code)}
                       title="Copy code"
-                      className="font-mono text-lg font-black text-brand-gold hover:underline focus:outline-none focus:ring-2 focus:ring-brand-gold/40 rounded px-1 -mx-1"
+                      className="font-mono text-lg font-black text-brand-gold hover:underline focus:outline-none focus:ring-2 focus:ring-brand-gold/40 rounded px-1 -mx-1 flex items-center gap-1.5"
                     >
                       {promo.code}
+                      <Copy className="w-3.5 h-3.5 opacity-60" />
                     </button>
                     {promo.description && (
                       <div className="text-xs text-gray-400 mt-1 line-clamp-2">
@@ -920,7 +902,6 @@ export default function AdminPromoCodes() {
                   )}
                 </div>
 
-                {/* Usage progress */}
                 {usagePct != null && (
                   <div className="mt-3">
                     <div
@@ -949,16 +930,29 @@ export default function AdminPromoCodes() {
                   <button
                     onClick={() => openEdit(promo)}
                     disabled={busy}
-                    className="flex-1 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600"
+                    className="flex-1 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600 flex items-center justify-center gap-1"
                   >
+                    <Pencil className="w-3 h-3" />
                     Edit
                   </button>
                   <button
                     onClick={() => toggleActive(promo)}
                     disabled={busy}
-                    className="flex-1 py-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 disabled:opacity-50 text-amber-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                    className="flex-1 py-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 disabled:opacity-50 text-amber-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/40 flex items-center justify-center gap-1"
                   >
-                    {busy ? "…" : promo.is_active ? "Disable" : "Enable"}
+                    {busy ? (
+                      "…"
+                    ) : promo.is_active ? (
+                      <>
+                        <PowerOff className="w-3 h-3" />
+                        Disable
+                      </>
+                    ) : (
+                      <>
+                        <Power className="w-3 h-3" />
+                        Enable
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={() => setDeleteTarget(promo)}
@@ -966,7 +960,7 @@ export default function AdminPromoCodes() {
                     aria-label={`Delete promo ${promo.code}`}
                     className="px-3 py-2 rounded-lg bg-red-600/20 hover:bg-red-600/30 disabled:opacity-50 text-red-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
                   >
-                    🗑
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </article>
@@ -975,7 +969,6 @@ export default function AdminPromoCodes() {
         </div>
       )}
 
-      {/* ---------- Add/Edit form modal ---------- */}
       {showForm && (
         <Modal
           onClose={() => setShowForm(false)}
@@ -997,20 +990,20 @@ export default function AdminPromoCodes() {
                 aria-label="Close"
                 className="text-gray-400 hover:text-white p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-600 disabled:opacity-50"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {formError && (
               <div
                 role="alert"
-                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs"
+                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-start gap-2"
               >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 {formError}
               </div>
             )}
 
-            {/* Live preview */}
             <div className="p-3 rounded-xl bg-brand-dark border border-gray-700">
               <div className="text-[10px] uppercase text-gray-500 font-bold mb-1">
                 Preview
@@ -1056,7 +1049,7 @@ export default function AdminPromoCodes() {
                     title="Suggest a code"
                     className="px-3 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600"
                   >
-                    🎲
+                    <Dice5 className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -1080,7 +1073,6 @@ export default function AdminPromoCodes() {
               />
             </Field>
 
-            {/* Discount type */}
             <Field label="Discount Type">
               <div
                 role="radiogroup"
@@ -1315,7 +1307,6 @@ export default function AdminPromoCodes() {
               Active (customers can use this code)
             </label>
 
-            {/* Sticky footer */}
             <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 bg-brand-card border-t border-gray-700 flex gap-3">
               <button
                 type="button"
@@ -1341,7 +1332,6 @@ export default function AdminPromoCodes() {
         </Modal>
       )}
 
-      {/* ---------- Delete confirm ---------- */}
       {deleteTarget && (
         <Modal
           onClose={() => (deleting ? null : setDeleteTarget(null))}
@@ -1349,12 +1339,17 @@ export default function AdminPromoCodes() {
           disableClose={deleting}
         >
           <div className="p-6 space-y-4">
-            <h3
-              id="delete-promo-title"
-              className="font-heading text-lg font-bold text-white"
-            >
-              Delete promo code?
-            </h3>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-red-400" />
+              </div>
+              <h3
+                id="delete-promo-title"
+                className="font-heading text-lg font-bold text-white"
+              >
+                Delete promo code?
+              </h3>
+            </div>
             <p className="text-sm text-gray-400">
               You're about to delete{" "}
               <span className="font-mono text-white font-bold">
@@ -1393,10 +1388,6 @@ export default function AdminPromoCodes() {
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  tiny Row component                                                 */
-/* ------------------------------------------------------------------ */
 
 function Row({ label, value, valueClass = "text-white" }) {
   return (

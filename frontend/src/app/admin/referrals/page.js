@@ -2,12 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Search,
+  X,
+  AlertCircle,
+  RefreshCw,
+  Gift,
+  Clock,
+  CheckCircle2,
+  Hourglass,
+  XCircle,
+  Copy,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { SkeletonBlock, SkeletonLine } from "@/components/Skeleton";
-
-/* ------------------------------------------------------------------ */
-/*  constants                                                          */
-/* ------------------------------------------------------------------ */
 
 const TOKEN_KEY = "mrf_token";
 const TOKEN_ISSUED_AT_KEY = "mrf_token_issued_at";
@@ -18,25 +27,25 @@ const STATUS_META = {
     label: "Pending",
     color: "text-amber-400",
     bg: "bg-amber-500/15 border-amber-500/30",
-    emoji: "⏳",
+    Icon: Clock,
   },
   completed: {
     label: "Completed",
     color: "text-emerald-400",
     bg: "bg-emerald-500/15 border-emerald-500/30",
-    emoji: "🎉",
+    Icon: CheckCircle2,
   },
   expired: {
     label: "Expired",
     color: "text-gray-400",
     bg: "bg-gray-500/15 border-gray-500/30",
-    emoji: "⌛",
+    Icon: Hourglass,
   },
   cancelled: {
     label: "Cancelled",
     color: "text-red-400",
     bg: "bg-red-500/15 border-red-500/30",
-    emoji: "❌",
+    Icon: XCircle,
   },
 };
 
@@ -46,10 +55,6 @@ const FILTERS = [
   { key: "completed", label: "Completed" },
   { key: "expired", label: "Expired" },
 ];
-
-/* ------------------------------------------------------------------ */
-/*  helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 function getAdminToken() {
   if (typeof window === "undefined") return null;
@@ -94,19 +99,6 @@ function formatGHS(v) {
   return `GH₵ ${n.toFixed(2)}`;
 }
 
-function formatDateTime(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function formatDate(iso) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -132,21 +124,18 @@ function isValidPhone(raw) {
   return !!normalizePhone(raw);
 }
 
-/* ------------------------------------------------------------------ */
-/*  UI primitives                                                      */
-/* ------------------------------------------------------------------ */
-
 function Toast({ toast }) {
   if (!toast) return null;
-  const styles =
-    toast.type === "error"
-      ? "bg-red-950/90 border-red-700 text-red-200"
-      : "bg-emerald-950/90 border-emerald-700 text-emerald-200";
+  const isError = toast.type === "error";
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${styles}`}
+      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${
+        isError
+          ? "bg-red-950/90 border-red-700 text-red-200"
+          : "bg-emerald-950/90 border-emerald-700 text-emerald-200"
+      }`}
     >
       {toast.message}
     </div>
@@ -238,13 +227,14 @@ function StatusBadge({ status }) {
     label: status || "Unknown",
     color: "text-gray-300",
     bg: "bg-gray-500/15 border-gray-500/30",
-    emoji: "•",
+    Icon: AlertCircle,
   };
+  const Icon = meta.Icon;
   return (
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold uppercase tracking-wide ${meta.color} ${meta.bg}`}
     >
-      <span aria-hidden="true">{meta.emoji}</span>
+      <Icon className="w-3 h-3" />
       {meta.label}
     </span>
   );
@@ -273,10 +263,6 @@ function ReferralsSkeleton({ rows = 6 }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  page                                                               */
-/* ------------------------------------------------------------------ */
-
 export default function AdminReferrals() {
   const router = useRouter();
 
@@ -299,7 +285,6 @@ export default function AdminReferrals() {
   const [formError, setFormError] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const [busyIds, setBusyIds] = useState(() => new Set());
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
@@ -313,7 +298,6 @@ export default function AdminReferrals() {
     []
   );
 
-  /* ---------- auth ---------- */
   useEffect(() => {
     const t = getAdminToken();
     if (!t) {
@@ -332,7 +316,6 @@ export default function AdminReferrals() {
     return () => window.removeEventListener("storage", onStorage);
   }, [router]);
 
-  /* ---------- authed fetch ---------- */
   const authFetch = useCallback(
     async (url, init = {}) => {
       const headers = {
@@ -350,7 +333,6 @@ export default function AdminReferrals() {
     [token, router]
   );
 
-  /* ---------- load ALL referrals once; filter client-side ---------- */
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -372,7 +354,6 @@ export default function AdminReferrals() {
     load();
   }, [token, reloadKey, load]);
 
-  /* ---------- create referral ---------- */
   const handleCreate = useCallback(
     async (e) => {
       e.preventDefault();
@@ -407,7 +388,6 @@ export default function AdminReferrals() {
         setShowForm(false);
         setForm({ referrer_phone: "", referrer_name: "" });
 
-        // Auto-copy the new code
         if (created?.code) {
           try {
             await navigator.clipboard?.writeText?.(created.code);
@@ -429,7 +409,6 @@ export default function AdminReferrals() {
     [form, authFetch, showToast]
   );
 
-  /* ---------- copy code ---------- */
   const copyCode = useCallback(
     async (code) => {
       try {
@@ -454,7 +433,6 @@ export default function AdminReferrals() {
     [showToast]
   );
 
-  /* ---------- derived ---------- */
   const counts = useMemo(() => {
     const c = { all: referrals.length, pending: 0, completed: 0, expired: 0, cancelled: 0 };
     for (const r of referrals) {
@@ -493,7 +471,6 @@ export default function AdminReferrals() {
           r.referee_phone?.toLowerCase().includes(q)
       );
     }
-    // Sort: pending first, then by created_at desc
     return [...list].sort((a, b) => {
       const aPending = a.status === "pending" ? 0 : 1;
       const bPending = b.status === "pending" ? 0 : 1;
@@ -504,7 +481,6 @@ export default function AdminReferrals() {
     });
   }, [referrals, filter, query]);
 
-  /* ---------- render guard ---------- */
   if (!authChecked || !token) {
     return (
       <div>
@@ -516,7 +492,6 @@ export default function AdminReferrals() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="font-heading text-3xl font-extrabold text-white">
@@ -532,38 +507,38 @@ export default function AdminReferrals() {
             setFormError("");
             setShowForm(true);
           }}
-          className="px-5 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
         >
-          + Generate Code
+          <Plus className="w-4 h-4" />
+          Generate Code
         </button>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <SummaryCard
           label="Completed Referrals"
           value={loading ? "—" : aggregates.completed}
           color="text-emerald-400"
+          Icon={CheckCircle2}
         />
         <SummaryCard
           label="Pending"
           value={loading ? "—" : aggregates.pending}
           color="text-amber-400"
+          Icon={Clock}
         />
         <SummaryCard
           label="Rewards Given"
           value={loading ? "—" : formatGHS(aggregates.totalGiven)}
           color="text-brand-gold"
+          Icon={Gift}
         />
       </div>
 
-      {/* Search + filters */}
       {!loading && referrals.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-6">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
-              🔍
-            </span>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -607,30 +582,28 @@ export default function AdminReferrals() {
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div
           role="alert"
           className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-3"
         >
+          <AlertCircle className="w-5 h-5 shrink-0" />
           <span className="flex-1">{error}</span>
           <button
             onClick={() => setReloadKey((k) => k + 1)}
-            className="text-xs font-bold underline hover:no-underline"
+            className="flex items-center gap-1 text-xs font-bold underline hover:no-underline"
           >
+            <RefreshCw className="w-3 h-3" />
             Retry
           </button>
         </div>
       )}
 
-      {/* Content */}
       {loading ? (
         <ReferralsSkeleton rows={6} />
       ) : referrals.length === 0 ? (
         <div className="bg-brand-card border border-gray-700 rounded-2xl p-12 text-center">
-          <div className="text-5xl mb-3" aria-hidden="true">
-            🎁
-          </div>
+          <Gift className="w-12 h-12 text-gray-600 mx-auto mb-3" />
           <h2 className="font-bold text-white text-lg">No referrals yet</h2>
           <p className="text-gray-400 text-sm mt-1 max-w-sm mx-auto">
             Generate a code for a customer to get the referral program going.
@@ -657,7 +630,6 @@ export default function AdminReferrals() {
         </div>
       ) : (
         <>
-          {/* Desktop table */}
           <div className="hidden md:block overflow-x-auto bg-brand-card border border-gray-700 rounded-2xl">
             <table className="w-full text-sm">
               <caption className="sr-only">Referral list</caption>
@@ -693,9 +665,10 @@ export default function AdminReferrals() {
                       <button
                         onClick={() => copyCode(r.code)}
                         title="Copy code"
-                        className="font-mono text-xs text-brand-gold font-bold hover:underline focus:outline-none focus:ring-2 focus:ring-brand-gold/40 rounded px-1 -mx-1"
+                        className="font-mono text-xs text-brand-gold font-bold hover:underline focus:outline-none focus:ring-2 focus:ring-brand-gold/40 rounded px-1 -mx-1 flex items-center gap-1"
                       >
                         {r.code}
+                        <Copy className="w-3 h-3 opacity-60" />
                       </button>
                     </td>
                     <td className="px-4 py-3">
@@ -745,7 +718,6 @@ export default function AdminReferrals() {
             </table>
           </div>
 
-          {/* Mobile cards */}
           <div className="md:hidden space-y-3">
             {visibleReferrals.map((r) => (
               <div
@@ -755,9 +727,10 @@ export default function AdminReferrals() {
                 <div className="flex items-start justify-between gap-2">
                   <button
                     onClick={() => copyCode(r.code)}
-                    className="font-mono text-sm text-brand-gold font-bold hover:underline focus:outline-none rounded px-1 -mx-1"
+                    className="font-mono text-sm text-brand-gold font-bold hover:underline focus:outline-none rounded px-1 -mx-1 flex items-center gap-1"
                   >
                     {r.code}
+                    <Copy className="w-3 h-3 opacity-60" />
                   </button>
                   <StatusBadge status={r.status} />
                 </div>
@@ -800,7 +773,6 @@ export default function AdminReferrals() {
         </>
       )}
 
-      {/* ---------- Generate code modal ---------- */}
       {showForm && (
         <Modal
           onClose={() => setShowForm(false)}
@@ -822,15 +794,16 @@ export default function AdminReferrals() {
                 aria-label="Close"
                 className="text-gray-400 hover:text-white p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-600 disabled:opacity-50"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {formError && (
               <div
                 role="alert"
-                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs"
+                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-start gap-2"
               >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 {formError}
               </div>
             )}
@@ -917,14 +890,11 @@ export default function AdminReferrals() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  small bits                                                         */
-/* ------------------------------------------------------------------ */
-
-function SummaryCard({ label, value, color }) {
+function SummaryCard({ label, value, color, Icon }) {
   return (
     <div className="bg-brand-card border border-gray-700 rounded-2xl p-5">
-      <div className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">
+      <div className="flex items-center gap-2 text-[10px] text-gray-400 uppercase tracking-wider font-bold">
+        {Icon && <Icon className="w-3.5 h-3.5" />}
         {label}
       </div>
       <div className={`text-2xl font-black mt-1 ${color}`}>{value}</div>

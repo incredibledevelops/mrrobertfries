@@ -9,12 +9,26 @@ from app.crud import loyalty as loyalty_crud
 from app.crud import promo_code as promo_crud
 from app.crud import referral as referral_crud
 from app.models.order import Order, OrderStatus, OrderStatusEvent
+from app.models.promo_code import PromoCode
 from app.models.user import User
 from app.utils.generators import generate_order_reference
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _effective_delivery_fee(subtotal: float, zone_fee: float) -> float:
+    """
+    Free-delivery rule:
+      - If FREE_DELIVERY_THRESHOLD <= 0, the rule is disabled.
+      - If subtotal >= threshold, delivery fee is 0.
+      - Otherwise, use the zone's fee.
+    """
+    threshold = float(settings.FREE_DELIVERY_THRESHOLD or 0)
+    if threshold > 0 and subtotal >= threshold:
+        return 0.0
+    return round(float(zone_fee), 2)
 
 
 async def create_order(
@@ -31,13 +45,18 @@ async def create_order(
 ) -> tuple[Order, int, int]:
     subtotal = round(sum(i["unit_price"] * i["quantity"] for i in items), 2)
 
+    # Apply free-delivery threshold BEFORE any discount calculation, because
+    # promos that reference the delivery fee (FREE_DELIVERY promos) should
+    # see the already-adjusted fee.
+    effective_delivery_fee = _effective_delivery_fee(subtotal, delivery_fee)
+
     promo_discount = 0.0
-    promo: Optional[promo_crud.PromoCode] = None  # type: ignore
+    promo: Optional[PromoCode] = None
     if promo_code:
         valid, msg, discount, promo = await promo_crud.validate_promo(
             code=promo_code,
             subtotal=subtotal,
-            delivery_fee=delivery_fee,
+            delivery_fee=effective_delivery_fee,
             phone=customer.get("phone"),
         )
         if not valid:
@@ -63,7 +82,8 @@ async def create_order(
         )
 
     total = round(
-        max(subtotal + delivery_fee - promo_discount - loyalty_discount, 0), 2
+        max(subtotal + effective_delivery_fee - promo_discount - loyalty_discount, 0),
+        2,
     )
 
     order = Order(
@@ -75,7 +95,7 @@ async def create_order(
         delivery_address=delivery_address,
         items=items,
         subtotal=subtotal,
-        delivery_fee=round(delivery_fee, 2),
+        delivery_fee=effective_delivery_fee,
         promo_code=promo.code if promo else None,
         promo_discount=promo_discount,
         loyalty_points_redeemed=int(redeem_points or 0),

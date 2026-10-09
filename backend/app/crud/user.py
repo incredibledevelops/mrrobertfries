@@ -47,19 +47,25 @@ async def list_users(
     search: Optional[str] = None,
 ) -> list[User]:
     query = User.find()
+
     if role:
         query = query.find(User.role == role)
+
     if branch_id:
         query = query.find(User.branch_id == PydanticObjectId(branch_id))
-    users = await query.sort(+User.created_at).to_list()
+
     if search:
-        s = search.lower()
-        users = [
-            u for u in users
-            if s in u.full_name.lower() or s in u.email.lower()
-            or (u.phone and s in u.phone)
-        ]
-    return users
+        import re
+        rx = re.escape(search.strip())
+        query = query.find({
+            "$or": [
+                {"full_name": {"$regex": rx, "$options": "i"}},
+                {"email": {"$regex": rx, "$options": "i"}},
+                {"phone": {"$regex": rx, "$options": "i"}},
+            ]
+        })
+
+    return await query.sort(+User.created_at).to_list()
 
 
 async def update_user(user: User, data: dict) -> User:

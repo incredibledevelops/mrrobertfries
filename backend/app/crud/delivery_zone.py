@@ -48,7 +48,12 @@ async def list_zones(
 
 async def list_orphans() -> list[DeliveryZone]:
     """Zones with no branch_id (they show up in every branch)."""
-    return await DeliveryZone.find(DeliveryZone.branch_id == None).to_list()  # noqa: E711
+    # Raw dict form is unambiguous: match documents where branch_id is
+    # missing OR explicitly null. `== None` relies on Beanie translating
+    # equality to a Mongo null-match, which is fragile across versions.
+    return await DeliveryZone.find(
+        {"branch_id": None}
+    ).to_list()
 
 
 async def count_for_branch(branch_id: str) -> int:
@@ -57,6 +62,11 @@ async def count_for_branch(branch_id: str) -> int:
     except Exception:
         return 0
     return await DeliveryZone.find(DeliveryZone.branch_id == bid).count()
+
+
+async def count_orphans() -> int:
+    """Count of zones with no branch_id — cheaper than fetching them all."""
+    return await DeliveryZone.find({"branch_id": None}).count()
 
 
 async def get_zone(zone_id: str) -> Optional[DeliveryZone]:
@@ -136,3 +146,21 @@ async def zone_belongs_to_branch(
         )
 
     return True, ""
+
+
+async def count_for_branches() -> dict[str, int]:
+    """
+    Returns {"<branch_id>": count, "shared": count} in two queries total.
+    Used by `list_with_zone_counts` to avoid an N+1 pattern.
+    """
+    zones = await DeliveryZone.find().to_list()
+    counts: dict[str, int] = {}
+    shared = 0
+    for z in zones:
+        if z.branch_id is None:
+            shared += 1
+        else:
+            key = str(z.branch_id)
+            counts[key] = counts.get(key, 0) + 1
+    counts["shared"] = shared
+    return counts

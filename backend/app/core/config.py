@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     DEFAULT_DELIVERY_FEE: float = 15.00
     CURRENCY: str = "GHS"
 
+    # Free delivery: any subtotal >= this amount gets GH₵ 0 delivery fee.
+    # Set to 0 to disable the rule entirely.
+    FREE_DELIVERY_THRESHOLD: float = 100.0
+
     # Email
     RESEND_API_KEY: str = ""
     MAIL_FROM: str = "Mr. Robert's Fries <onboarding@resend.dev>"
@@ -66,13 +70,17 @@ class Settings(BaseSettings):
 
     # SMS
     ARKESEL_API_KEY: str = ""
-    ARKESEL_SENDER_ID: str = "MrRobertsFries"
+    ARKESEL_SENDER_ID: str = "MrRobertsF"   # ≤ 11 chars (Ghana SMS gateway limit)
     ARKESEL_BASE_URL: str = "https://sms.arkesel.com/api/v2"
 
     # Loyalty
     LOYALTY_POINTS_PER_CEDI: int = 1
     LOYALTY_POINTS_TO_CEDI: float = 0.01
     LOYALTY_MIN_REDEEM: int = 100
+
+    # Idempotency records are removed after this many hours by the Mongo TTL
+    # index (see models/idempotency.py). 24h covers all realistic retries.
+    IDEMPOTENCY_TTL_HOURS: int = 24
 
     @property
     def cors_origins_list(self) -> List[str]:

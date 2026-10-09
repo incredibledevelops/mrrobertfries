@@ -70,6 +70,19 @@ async def list_items(
     return [MenuItemOut(**d) for d in data]
 
 
+# ---------------------------------------------------------------------------
+# IMPORTANT: literal paths must be declared BEFORE /{item_id}
+# ---------------------------------------------------------------------------
+
+@router.get("/low-stock", dependencies=[Depends(get_current_admin)])
+async def list_low_stock(threshold: int = Query(5, ge=0, le=1000)):
+    """
+    Items whose `stock_count` is at or below the given threshold.
+    Items with `stock_count=None` (unlimited) are excluded.
+    """
+    return await menu_crud.low_stock_items(threshold=threshold)
+
+
 @router.get("/slug/{slug}", response_model=MenuItemOut)
 async def get_item_by_slug(slug: str):
     cache_key = f"menu:slug:{slug}"
@@ -88,14 +101,20 @@ async def get_item_by_slug(slug: str):
 
 
 @router.get("/{item_id}/related", response_model=list[MenuItemOut])
-async def get_related(item_id: str, limit: int = Query(4, ge=1, le=12)):
-    cache_key = f"menu:related:{item_id}:{limit}"
+async def get_related(
+    item_id: str,
+    limit: int = Query(4, ge=1, le=12),
+    branch_id: Optional[str] = Query(None),
+):
+    cache_key = f"menu:related:{item_id}:{limit}:{branch_id or 'all'}"
 
     async def build():
         item = await menu_crud.get_item(item_id)
         if not item:
             return None
-        related = await menu_crud.related_items(item, limit=limit)
+        related = await menu_crud.related_items(
+            item, limit=limit, branch_id=branch_id
+        )
         ratings = await menu_crud.ratings_map_for(related)
         return [_to_out(i, ratings.get(str(i.id))).model_dump() for i in related]
 

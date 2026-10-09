@@ -1,13 +1,15 @@
-from fastapi import Request
-from app.core.limiter import limiter
+import logging
 from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from app.core.limiter import limiter
 
 from app.core.config import settings
 from app.core.deps import get_current_staff_or_admin
 from app.core.email import send_order_receipt
 from app.core.paystack import PaystackError, paystack_client
 from app.core.sms import sms_loyalty_earned, sms_order_paid
+from app.crud import loyalty as loyalty_crud
 from app.crud import order as order_crud
 from app.crud import payment as payment_crud
 from app.models.order import OrderStatus
@@ -20,7 +22,6 @@ from app.schemas.payment import (
 )
 from app.utils.generators import generate_payment_reference
 
-import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
@@ -73,9 +74,9 @@ async def _on_paid(order, was_already_success: bool) -> None:
     # 4. SMS about points earned
     if earned > 0:
         try:
-            customer = await __import__(
-                "app.crud.loyalty", fromlist=["get_customer_by_phone"]
-            ).get_customer_by_phone(order.customer.phone)
+            customer = await loyalty_crud.get_customer_by_phone(
+                order.customer.phone
+            )
             if customer:
                 await sms_loyalty_earned(order, earned, customer.loyalty_points)
         except Exception:

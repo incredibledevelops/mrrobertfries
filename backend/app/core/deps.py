@@ -7,8 +7,8 @@ from fastapi.security import OAuth2PasswordBearer
 from app.core.config import settings
 from app.core.security import decode_token
 from app.crud import customer as customer_crud
+from app.crud import idempotency as idempotency_crud
 from app.models.customer import Customer
-from app.models.idempotency import IdempotencyRecord
 from app.models.user import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -35,10 +35,7 @@ async def check_idempotency(
     """Return a previously stored response body if this key was used before."""
     if not key:
         return None
-    record = await IdempotencyRecord.find_one(
-        IdempotencyRecord.key == key,
-        IdempotencyRecord.endpoint == endpoint,
-    )
+    record = await idempotency_crud.get(key, endpoint)
     if record and record.response_body:
         return record.response_body
     return None
@@ -53,19 +50,7 @@ async def store_idempotency(
     if not key:
         return
     try:
-        existing = await IdempotencyRecord.find_one(
-            IdempotencyRecord.key == key,
-            IdempotencyRecord.endpoint == endpoint,
-        )
-        if existing:
-            return
-        record = IdempotencyRecord(
-            key=key,
-            endpoint=endpoint,
-            response_status=status_code,
-            response_body=body,
-        )
-        await record.insert()
+        await idempotency_crud.save(key, endpoint, body, status_code)
     except Exception:
         import logging
         logging.getLogger(__name__).exception("idempotency store failed")

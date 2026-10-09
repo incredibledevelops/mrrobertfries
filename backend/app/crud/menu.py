@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Optional
 
@@ -7,10 +8,16 @@ from app.crud import review as review_crud
 from app.models.category import Category
 from app.models.menu_item import MenuItem
 
+logger = logging.getLogger(__name__)
+
 
 def slugify(text: str) -> str:
     text = re.sub(r"[^\w\s-]", "", text.lower())
     return re.sub(r"[-\s]+", "-", text).strip("-")
+
+
+def _escape_regex(s: str) -> str:
+    return re.escape(s)
 
 
 async def create_item(data: dict) -> MenuItem:
@@ -56,18 +63,20 @@ async def list_items_branched(
     if available_only:
         query = query.find(MenuItem.is_available == True)  # noqa: E712
 
-    items = await query.sort(+MenuItem.display_order).to_list()
-
     if search:
-        s = search.lower()
-        items = [
-            i
-            for i in items
-            if s in i.name.lower()
-            or (i.description or "").lower().find(s) >= 0
-            or any(s in t.lower() for t in (i.tags or []))
-        ]
-    return items
+        # Push the substring filter into Mongo so we don't fetch the whole
+        # collection and filter in Python. Case-insensitive regex on
+        # name/description/tags.
+        rx = _escape_regex(search.strip())
+        query = query.find({
+            "$or": [
+                {"name": {"$regex": rx, "$options": "i"}},
+                {"description": {"$regex": rx, "$options": "i"}},
+                {"tags": {"$regex": rx, "$options": "i"}},
+            ]
+        })
+
+    return await query.sort(+MenuItem.display_order).to_list()
 
 
 async def search_full(
@@ -77,31 +86,45 @@ async def search_full(
 ) -> dict:
     """
     Search across menu items and categories.
-    Simple substring matching. Case-insensitive. Ignores branch by default
-    so results always come back (frontend can filter further).
-    """
-    q = (query or "").strip().lower()
 
-    # Empty query → return nothing, no error
+    Matching is done server-side (regex) so we don't pull the whole
+    collection into memory. Case-insensitive. If `branch_id` is provided,
+    only items available at that branch (or shared) are considered.
+    """
+    q = (query or "").strip()
     if not q:
         return {"items": [], "categories": [], "suggestions": []}
 
+    rx = _escape_regex(q)
+
     # ---------- 1. Items ----------
-    all_items = await MenuItem.find().to_list()
-    print(f"[search] query='{q}' — total items in DB: {len(all_items)}")
+    item_query = MenuItem.find({
+        "$or": [
+            {"name": {"$regex": rx, "$options": "i"}},
+            {"description": {"$regex": rx, "$options": "i"}},
+            {"tags": {"$regex": rx, "$options": "i"}},
+        ]
+    })
 
-    matched_items: list[MenuItem] = []
-    for item in all_items:
-        name = (item.name or "").lower()
-        desc = (item.description or "").lower()
-        tags = " ".join(item.tags or []).lower()
+    if branch_id:
+        try:
+            bid = PydanticObjectId(branch_id)
+            item_query = item_query.find({
+                "$or": [
+                    {"branch_id": bid},
+                    {"branch_id": None},
+                ]
+            })
+        except Exception:
+            # Invalid branch id — fall through without branch filter.
+            pass
 
-        if q in name or q in desc or q in tags:
-            matched_items.append(item)
-            if len(matched_items) >= limit:
-                break
+    matched_items = await item_query.limit(limit).to_list()
 
-    print(f"[search] query='{q}' — matched items: {len(matched_items)}")
+    logger.debug(
+        "[search] q=%r branch=%r matched_items=%d",
+        q, branch_id, len(matched_items),
+    )
 
     # Attach ratings + category names
     item_ids = [i.id for i in matched_items]
@@ -134,22 +157,26 @@ async def search_full(
         )
 
     # ---------- 2. Categories ----------
-    all_cats = await Category.find().to_list()
-    matched_cats = []
-    for c in all_cats:
-        cn = (c.name or "").lower()
-        cs = (c.slug or "").lower()
-        if q in cn or q in cs:
-            matched_cats.append(
-                {
-                    "id": str(c.id),
-                    "name": c.name,
-                    "slug": c.slug,
-                    "image_url": c.image_url,
-                }
-            )
+    matched_cats = await Category.find({
+        "$or": [
+            {"name": {"$regex": rx, "$options": "i"}},
+            {"slug": {"$regex": rx, "$options": "i"}},
+        ]
+    }).to_list()
 
-    print(f"[search] query='{q}' — matched categories: {len(matched_cats)}")
+    cats_out = [
+        {
+            "id": str(c.id),
+            "name": c.name,
+            "slug": c.slug,
+            "image_url": c.image_url,
+        }
+        for c in matched_cats
+    ]
+
+    logger.debug(
+        "[search] q=%r matched_categories=%d", q, len(cats_out),
+    )
 
     # ---------- 3. Suggestions ----------
     suggestions = []
@@ -157,14 +184,14 @@ async def search_full(
         suggestions.append(
             {"text": item["name"], "kind": "item", "slug": item["slug"]}
         )
-    for c in matched_cats[:3]:
+    for c in cats_out[:3]:
         suggestions.append(
             {"text": c["name"], "kind": "category", "slug": c["slug"]}
         )
 
     return {
         "items": items_out,
-        "categories": matched_cats,
+        "categories": cats_out,
         "suggestions": suggestions,
     }
 
@@ -207,17 +234,62 @@ async def ratings_map_for(items: list[MenuItem]) -> dict[str, dict]:
     return await review_crud.ratings_for_items(ids)
 
 
-async def related_items(item: MenuItem, limit: int = 4) -> list[MenuItem]:
-    return (
-        await MenuItem.find(
-            MenuItem.category_id == item.category_id,
-            MenuItem.id != item.id,
-            MenuItem.is_available == True,  # noqa: E712
-        )
+async def related_items(
+    item: MenuItem,
+    limit: int = 4,
+    branch_id: Optional[str] = None,
+) -> list[MenuItem]:
+    """
+    Related items: same category, available, excluding the current item.
+    Branch-aware: if `branch_id` is given, includes items shared across
+    branches + items scoped to that branch.
+
+    If the category has fewer than `limit` items, top up with recent
+    available items from other categories (still branch-scoped) so we
+    never return an empty section for a category with one product.
+    """
+    base_query: dict = {
+        "_id": {"$ne": item.id},
+        "category_id": item.category_id,
+        "is_available": True,
+    }
+    if branch_id:
+        try:
+            bid = PydanticObjectId(branch_id)
+            base_query["$or"] = [{"branch_id": bid}, {"branch_id": None}]
+        except Exception:
+            pass
+
+    related = (
+        await MenuItem.find(base_query)
         .sort(+MenuItem.display_order)
         .limit(limit)
         .to_list()
     )
+
+    if len(related) >= limit:
+        return related
+
+    # Top up with other categories.
+    exclude_ids = [item.id] + [r.id for r in related]
+    fallback_query: dict = {
+        "_id": {"$nin": exclude_ids},
+        "is_available": True,
+    }
+    if branch_id:
+        try:
+            bid = PydanticObjectId(branch_id)
+            fallback_query["$or"] = [{"branch_id": bid}, {"branch_id": None}]
+        except Exception:
+            pass
+
+    extra = (
+        await MenuItem.find(fallback_query)
+        .sort(+MenuItem.display_order)
+        .limit(limit - len(related))
+        .to_list()
+    )
+    return related + extra
 
 
 async def low_stock_items(threshold: int = 5) -> list[dict]:

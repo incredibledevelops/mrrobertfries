@@ -7,6 +7,7 @@ from app.crud import review as review_crud
 from app.models.review import Review
 from app.schemas.review import (
     ReviewCreate,
+    ReviewModerateIn,
     ReviewOut,
     ReviewSummary,
 )
@@ -149,11 +150,7 @@ async def list_all(
     response_model=ReviewOut,
     dependencies=[Depends(get_current_admin)],
 )
-async def moderate_review(
-    review_id: str,
-    is_published: bool | None = None,
-    is_featured: bool | None = None,
-):
+async def moderate_review(review_id: str, payload: ReviewModerateIn):
     from beanie import PydanticObjectId
     try:
         oid = PydanticObjectId(review_id)
@@ -165,7 +162,9 @@ async def moderate_review(
         raise HTTPException(404, "Review not found")
 
     review = await review_crud.update_review(
-        review, is_published=is_published, is_featured=is_featured
+        review,
+        is_published=payload.is_published,
+        is_featured=payload.is_featured,
     )
     return _to_out(review)
 

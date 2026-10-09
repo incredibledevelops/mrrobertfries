@@ -2,17 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff, LogIn, AlertCircle } from "lucide-react";
 import { apiSend } from "@/lib/api";
 
 const TOKEN_KEY = "mrf_token";
 const TOKEN_ISSUED_AT_KEY = "mrf_token_issued_at";
-const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const IS_DEV = process.env.NODE_ENV !== "production";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/* ------------------------------------------------------------------ */
-/*  helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 function readExistingToken() {
   if (typeof window === "undefined") return null;
@@ -20,7 +17,6 @@ function readExistingToken() {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) return null;
     const issuedAt = Number(localStorage.getItem(TOKEN_ISSUED_AT_KEY) || 0);
-    // If we don't know when it was issued, treat it as fresh enough.
     if (issuedAt && Date.now() - issuedAt > SESSION_MAX_AGE_MS) {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(TOKEN_ISSUED_AT_KEY);
@@ -36,13 +32,10 @@ function saveToken(token) {
   try {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(TOKEN_ISSUED_AT_KEY, String(Date.now()));
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 }
 
 function friendlyError(err) {
-  // Try to use status if present
   const status = err?.status || err?.response?.status;
   const raw = String(err?.message || err?.detail || "");
 
@@ -58,10 +51,6 @@ function friendlyError(err) {
   return raw || "Sign in failed. Please try again.";
 }
 
-/* ------------------------------------------------------------------ */
-/*  page                                                               */
-/* ------------------------------------------------------------------ */
-
 export default function AdminLogin() {
   const router = useRouter();
   const emailRef = useRef(null);
@@ -76,7 +65,6 @@ export default function AdminLogin() {
   const [retryIn, setRetryIn] = useState(0);
   const [checkedAuth, setCheckedAuth] = useState(false);
 
-  // Bounce already-authenticated admins to the dashboard
   useEffect(() => {
     const token = readExistingToken();
     if (token) {
@@ -86,7 +74,6 @@ export default function AdminLogin() {
     setCheckedAuth(true);
   }, [router]);
 
-  // Cooldown ticker for 429s
   useEffect(() => {
     if (retryIn <= 0) return;
     const t = setInterval(() => {
@@ -95,7 +82,6 @@ export default function AdminLogin() {
     return () => clearInterval(t);
   }, [retryIn]);
 
-  // Focus the error banner when it appears (screen readers + sighted users)
   useEffect(() => {
     if (error && errorRef.current) {
       errorRef.current.focus?.();
@@ -104,14 +90,12 @@ export default function AdminLogin() {
 
   const emailValid = useMemo(() => EMAIL_RE.test(email.trim()), [email]);
   const passwordValid = useMemo(() => password.length >= 6, [password]);
-  const canSubmit =
-    emailValid && passwordValid && !loading && retryIn === 0;
+  const canSubmit = emailValid && passwordValid && !loading && retryIn === 0;
 
   const handleLogin = useCallback(
     async (e) => {
       e.preventDefault();
       if (!canSubmit) {
-        // Focus first invalid field
         if (!emailValid) emailRef.current?.focus();
         else if (!passwordValid) passwordRef.current?.focus();
         return;
@@ -129,21 +113,17 @@ export default function AdminLogin() {
         if (!token) throw new Error("Server didn't return a token.");
 
         saveToken(token);
-        // Replace so the back button doesn't land on the login form
         router.replace("/admin/dashboard");
       } catch (err) {
-        // Handle 429 with Retry-After if available
         const status = err?.status || err?.response?.status;
         const retryAfter =
-          err?.response?.headers?.get?.("retry-after") ||
-          err?.retryAfter;
+          err?.response?.headers?.get?.("retry-after") || err?.retryAfter;
         if (status === 429 && retryAfter) {
           const secs = Math.max(1, parseInt(retryAfter, 10) || 30);
           setRetryIn(secs);
         }
         setError(friendlyError(err));
-        setPassword(""); // don't keep a bad password in memory
-        // Refocus password on auth failure so the user can retry immediately
+        setPassword("");
         requestAnimationFrame(() => passwordRef.current?.focus());
       } finally {
         setLoading(false);
@@ -152,7 +132,6 @@ export default function AdminLogin() {
     [canSubmit, emailValid, passwordValid, email, password, router]
   );
 
-  // Esc clears the error
   useEffect(() => {
     function onKey(e) {
       if (e.key === "Escape" && error) setError("");
@@ -161,7 +140,6 @@ export default function AdminLogin() {
     return () => window.removeEventListener("keydown", onKey);
   }, [error]);
 
-  // Don't flash the form while we check the token
   if (!checkedAuth) {
     return (
       <div className="min-h-screen bg-brand-dark flex items-center justify-center p-4">
@@ -194,7 +172,6 @@ export default function AdminLogin() {
           </p>
         </header>
 
-        {/* Error banner with reserved space to avoid layout shift */}
         <div className="min-h-[2.5rem]">
           {error && (
             <div
@@ -202,14 +179,17 @@ export default function AdminLogin() {
               tabIndex={-1}
               role="alert"
               aria-live="assertive"
-              className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs focus:outline-none"
+              className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs focus:outline-none flex items-start gap-2"
             >
-              {error}
-              {retryIn > 0 && (
-                <span className="block mt-1 text-[11px] text-red-300">
-                  Try again in {retryIn}s.
-                </span>
-              )}
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                {error}
+                {retryIn > 0 && (
+                  <span className="block mt-1 text-[11px] text-red-300">
+                    Try again in {retryIn}s.
+                  </span>
+                )}
+              </span>
             </div>
           )}
         </div>
@@ -285,7 +265,11 @@ export default function AdminLogin() {
               tabIndex={-1}
               className="absolute inset-y-0 right-2 my-auto w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-gold/40"
             >
-              {showPassword ? "🙈" : "👁"}
+              {showPassword ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
             </button>
           </div>
           {password.length > 0 && !passwordValid && (
@@ -308,13 +292,16 @@ export default function AdminLogin() {
           ) : retryIn > 0 ? (
             `Try again in ${retryIn}s`
           ) : (
-            "Sign In"
+            <>
+              <LogIn className="w-4 h-4" />
+              Sign In
+            </>
           )}
         </button>
 
         {IS_DEV && (
           <p className="text-[10px] text-gray-500 text-center">
-            Dev hint: admin@mrfries.com / Admin@1234
+            
           </p>
         )}
 

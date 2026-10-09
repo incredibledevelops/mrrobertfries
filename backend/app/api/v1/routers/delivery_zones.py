@@ -6,6 +6,7 @@ from app.core.cache import cache, invalidate_zones
 from app.core.deps import get_current_admin
 from app.crud import branch as branch_crud
 from app.crud import delivery_zone as zone_crud
+from app.models.branch import Branch
 from app.models.delivery_zone import DeliveryZone
 from app.schemas.delivery_zone import (
     AssignBranchIn,
@@ -17,9 +18,9 @@ from app.schemas.delivery_zone import (
 router = APIRouter(prefix="/delivery-zones", tags=["Delivery Zones"])
 
 
-async def _to_out(z: DeliveryZone) -> DeliveryZoneOut:
-    branch_name = None
-    if z.branch_id:
+async def _to_out(z: DeliveryZone, branch_name: Optional[str] = None) -> DeliveryZoneOut:
+    """Serialize one zone. Callers should supply `branch_name` if known."""
+    if branch_name is None and z.branch_id:
         b = await branch_crud.get_branch(str(z.branch_id))
         branch_name = b.name if b else "Unknown branch"
 
@@ -40,6 +41,25 @@ async def _to_out(z: DeliveryZone) -> DeliveryZoneOut:
     )
 
 
+async def _serialize_many(zones: list[DeliveryZone]) -> list[DeliveryZoneOut]:
+    """Serialize many zones with one batch query for branch names."""
+    branch_ids = {str(z.branch_id) for z in zones if z.branch_id}
+    name_map: dict[str, str] = {}
+    if branch_ids:
+        branches = await Branch.find(
+            {"_id": {"$in": list(branch_ids)}}
+        ).to_list()
+        name_map = {str(b.id): b.name for b in branches}
+
+    out = []
+    for z in zones:
+        bn = name_map.get(str(z.branch_id)) if z.branch_id else None
+        if z.branch_id and not bn:
+            bn = "Unknown branch"
+        out.append(await _to_out(z, branch_name=bn))
+    return out
+
+
 @router.get("", response_model=list[DeliveryZoneOut])
 async def list_zones(
     active_only: bool = False,
@@ -57,10 +77,8 @@ async def list_zones(
             branch_id=branch_id,
             include_shared=include_shared,
         )
-        out = []
-        for z in zones:
-            out.append((await _to_out(z)).model_dump())
-        return out
+        serialized = await _serialize_many(zones)
+        return [s.model_dump() for s in serialized]
 
     data = await cache.get_or_set(cache_key, build, ttl=60)
     return [DeliveryZoneOut(**d) for d in data]
@@ -68,8 +86,8 @@ async def list_zones(
 
 @router.get("/orphans/count")
 async def orphans_count(_=Depends(get_current_admin)):
-    orphans = await zone_crud.list_orphans()
-    return {"count": len(orphans)}
+    count = await zone_crud.count_orphans()
+    return {"count": count}
 
 
 @router.post(

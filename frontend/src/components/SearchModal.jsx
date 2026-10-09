@@ -2,9 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Search,
+  X,
+  Clock,
+  FolderOpen,
+  Utensils,
+  ArrowUp,
+  ArrowDown,
+  CornerDownLeft,
+  SearchX,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 
 const RECENT_KEY = "mrf_recent_searches";
+const BRANCH_KEY = "mrf_branch_id";
 const MAX_RECENT = 5;
 const DEBOUNCE_MS = 220;
 
@@ -19,15 +31,21 @@ function loadRecent() {
   }
 }
 
+function loadBranchId() {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(BRANCH_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
 function saveRecent(term) {
   if (!term) return;
   const trimmed = term.trim();
   if (!trimmed) return;
   const current = loadRecent();
-  const next = [trimmed, ...current.filter((t) => t !== trimmed)].slice(
-    0,
-    MAX_RECENT
-  );
+  const next = [trimmed, ...current.filter((t) => t !== trimmed)].slice(0, MAX_RECENT);
   try {
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
   } catch {}
@@ -52,28 +70,29 @@ export default function SearchModal({ open, onOpenChange }) {
   const [recent, setRecent] = useState([]);
   const [error, setError] = useState("");
 
-  /* ---------- open/close lifecycle ---------- */
+  // Branch id resolved from localStorage; refreshed on open.
+  const branchIdRef = useRef("");
+  useEffect(() => {
+    if (open) branchIdRef.current = loadBranchId();
+  }, [open]);
+
   useEffect(() => {
     if (open) {
       previouslyFocusedRef.current = document.activeElement;
       setRecent(loadRecent());
-      // focus after paint
+      branchIdRef.current = loadBranchId();
       requestAnimationFrame(() => inputRef.current?.focus());
     } else {
       setQuery("");
       setResults(null);
       setActiveIndex(0);
       setError("");
-      // restore focus to the element that opened us
       const prev = previouslyFocusedRef.current;
-      if (prev && typeof prev.focus === "function") {
-        prev.focus();
-      }
+      if (prev && typeof prev.focus === "function") prev.focus();
       previouslyFocusedRef.current = null;
     }
   }, [open]);
 
-  /* ---------- scroll lock ---------- */
   useEffect(() => {
     if (!open) return;
     const original = document.body.style.overflow;
@@ -86,11 +105,9 @@ export default function SearchModal({ open, onOpenChange }) {
     };
   }, [open]);
 
-  /* ---------- debounced fetch ---------- */
   useEffect(() => {
     if (!open) return;
     const trimmed = query.trim();
-
     if (trimmed.length < 2) {
       setResults(null);
       setError("");
@@ -104,8 +121,10 @@ export default function SearchModal({ open, onOpenChange }) {
 
     const timer = setTimeout(async () => {
       try {
+        const params = new URLSearchParams({ q: trimmed, limit: "8" });
+        if (branchIdRef.current) params.set("branch_id", branchIdRef.current);
         const res = await fetch(
-          `${API_URL}/api/v1/search?q=${encodeURIComponent(trimmed)}&limit=8`,
+          `${API_URL}/api/v1/search?${params.toString()}`,
           { cache: "no-store", signal: controller.signal }
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -127,7 +146,6 @@ export default function SearchModal({ open, onOpenChange }) {
     };
   }, [query, open]);
 
-  /* ---------- flat list of navigable items ---------- */
   const navigableItems = useMemo(() => {
     const list = [];
     if (results) {
@@ -166,16 +184,12 @@ export default function SearchModal({ open, onOpenChange }) {
     return list;
   }, [results, recent]);
 
-  /* ---------- keep active row in view ---------- */
   useEffect(() => {
     if (!listRef.current) return;
-    const el = listRef.current.querySelector(
-      `[data-row-index="${activeIndex}"]`
-    );
+    const el = listRef.current.querySelector(`[data-row-index="${activeIndex}"]`);
     el?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  /* ---------- actions ---------- */
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 
   const navigate = useCallback(
@@ -208,12 +222,12 @@ export default function SearchModal({ open, onOpenChange }) {
         e.preventDefault();
         const target = navigableItems[activeIndex];
         if (target) navigate(target.href);
-        else if (query.trim()) navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+        else if (query.trim())
+          navigate(`/search?q=${encodeURIComponent(query.trim())}`);
       } else if (e.key === "Escape") {
         e.preventDefault();
         close();
       } else if (e.key === "Tab") {
-        // simple focus trap
         const focusable = dialogRef.current?.querySelectorAll(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         );
@@ -264,15 +278,25 @@ export default function SearchModal({ open, onOpenChange }) {
 
       <div
         onClick={close}
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-[fadeIn_150ms_ease-out]"
       />
 
-      <div className="relative max-w-2xl mx-auto mt-4 sm:mt-24 px-4">
-        <div className="bg-brand-card border border-gray-700 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="relative max-w-2xl mx-auto mt-4 sm:mt-24 px-4 animate-[slideDown_200ms_ease-out]">
+        <style jsx>{`
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
+
+        <div className="bg-brand-card border border-gray-700 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden">
+          {/* Input */}
           <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-800">
-            <span className="text-brand-gold text-lg" aria-hidden="true">
-              🔍
-            </span>
+            <Search className="w-5 h-5 text-brand-gold shrink-0" aria-hidden="true" />
             <input
               ref={inputRef}
               value={query}
@@ -291,11 +315,24 @@ export default function SearchModal({ open, onOpenChange }) {
               }
               aria-busy={loading}
             />
-            <kbd className="hidden sm:inline-flex items-center gap-1 text-[10px] text-gray-500 border border-gray-700 px-2 py-1 rounded">
+            {query && (
+              <button
+                onClick={() => {
+                  setQuery("");
+                  inputRef.current?.focus();
+                }}
+                aria-label="Clear search"
+                className="p-1 rounded-md text-gray-500 hover:text-white hover:bg-gray-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+            <kbd className="hidden sm:inline-flex items-center gap-1 text-[10px] text-gray-500 border border-gray-700 px-2 py-1 rounded font-mono">
               ESC
             </kbd>
           </div>
 
+          {/* Results */}
           <div
             id="search-results"
             role="listbox"
@@ -303,7 +340,7 @@ export default function SearchModal({ open, onOpenChange }) {
             className="max-h-[60vh] overflow-y-auto overscroll-contain"
           >
             {loading && (
-              <div className="px-5 py-3 text-xs text-gray-500 flex items-center gap-2">
+              <div className="px-5 py-4 text-xs text-gray-500 flex items-center gap-2">
                 <span className="inline-block w-3 h-3 rounded-full border-2 border-brand-gold/40 border-t-brand-gold animate-spin" />
                 Searching…
               </div>
@@ -316,22 +353,33 @@ export default function SearchModal({ open, onOpenChange }) {
             )}
 
             {showEmptyPrompt && (
-              <div className="px-5 py-10 text-center">
-                <p className="text-gray-400 text-sm">
-                  Start typing to search our menu.
+              <div className="px-5 py-12 text-center">
+                <Search className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-400 text-sm font-medium">
+                  Start typing to search our menu
                 </p>
-                <p className="text-gray-600 text-xs mt-2">
-                  Try <span className="text-brand-gold">"wings"</span>,{" "}
-                  <span className="text-brand-gold">"gizzard"</span>, or{" "}
-                  <span className="text-brand-gold">"yam"</span>
-                </p>
+                <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
+                  <span className="text-[10px] text-gray-600 uppercase tracking-wider font-bold">
+                    Try:
+                  </span>
+                  {["wings", "gizzard", "yam"].map((term) => (
+                    <button
+                      key={term}
+                      onClick={() => setQuery(term)}
+                      className="px-2 py-1 rounded-md bg-gray-800 text-brand-gold text-xs font-mono hover:bg-gray-700 transition-colors"
+                    >
+                      {term}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
             {showRecents && (
               <div>
                 <div className="flex items-center justify-between px-5 pt-4 pb-2">
-                  <span className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                    <Clock className="w-3 h-3" />
                     Recent
                   </span>
                   <button
@@ -352,9 +400,7 @@ export default function SearchModal({ open, onOpenChange }) {
                     }
                     onMouseEnter={() => setActiveIndex(idx)}
                   >
-                    <span className="text-gray-400 mr-3" aria-hidden="true">
-                      🕒
-                    </span>
+                    <Clock className="w-4 h-4 text-gray-500 mr-3 shrink-0" />
                     <span className="flex-1 text-white text-sm">{term}</span>
                   </RowButton>
                 ))}
@@ -365,7 +411,8 @@ export default function SearchModal({ open, onOpenChange }) {
               <>
                 {results.items?.length > 0 && (
                   <div>
-                    <div className="px-5 pt-4 pb-2 text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                    <div className="px-5 pt-4 pb-2 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                      <Utensils className="w-3 h-3" />
                       Items ({results.items.length})
                     </div>
                     {navigableItems
@@ -384,15 +431,12 @@ export default function SearchModal({ open, onOpenChange }) {
                             <img
                               src={n.image}
                               alt=""
-                              className="w-10 h-10 rounded-lg object-cover mr-3"
+                              className="w-10 h-10 rounded-lg object-cover mr-3 shrink-0"
                               loading="lazy"
                             />
                           ) : (
-                            <span
-                              className="w-10 h-10 rounded-lg bg-gray-800 flex items-center justify-center mr-3"
-                              aria-hidden="true"
-                            >
-                              🍟
+                            <span className="w-10 h-10 rounded-lg bg-gray-800 flex items-center justify-center mr-3 shrink-0">
+                              <Utensils className="w-4 h-4 text-gray-500" />
                             </span>
                           )}
                           <div className="flex-1 min-w-0">
@@ -412,7 +456,8 @@ export default function SearchModal({ open, onOpenChange }) {
 
                 {results.categories?.length > 0 && (
                   <div>
-                    <div className="px-5 pt-4 pb-2 text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                    <div className="px-5 pt-4 pb-2 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                      <FolderOpen className="w-3 h-3" />
                       Categories
                     </div>
                     {navigableItems
@@ -427,12 +472,7 @@ export default function SearchModal({ open, onOpenChange }) {
                           onClick={() => navigate(n.href)}
                           onMouseEnter={() => setActiveIndex(idx)}
                         >
-                          <span
-                            className="text-brand-gold mr-3"
-                            aria-hidden="true"
-                          >
-                            📂
-                          </span>
+                          <FolderOpen className="w-4 h-4 text-brand-gold mr-3 shrink-0" />
                           <span className="flex-1 text-white text-sm">
                             {n.label}
                           </span>
@@ -444,14 +484,16 @@ export default function SearchModal({ open, onOpenChange }) {
             )}
 
             {showNoResults && (
-              <div className="px-5 py-10 text-center">
-                <p className="text-gray-400 text-sm">
-                  No results for <strong>"{query}"</strong>
+              <div className="px-5 py-12 text-center">
+                <SearchX className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-300 text-sm font-medium">
+                  No results for{" "}
+                  <span className="text-white">"{query}"</span>
                 </p>
                 <p className="text-gray-500 text-xs mt-2">
                   Try a different word or{" "}
                   <button
-                    onClick={() => navigate("/#menu")}
+                    onClick={() => navigate("/menu")}
                     className="text-brand-gold underline"
                   >
                     browse the full menu
@@ -461,17 +503,19 @@ export default function SearchModal({ open, onOpenChange }) {
             )}
           </div>
 
+          {/* Footer */}
           <div className="flex items-center justify-between px-5 py-3 border-t border-gray-800 bg-gray-900/50 text-[10px] text-gray-500">
             <div className="flex items-center gap-3">
-              <span className="hidden sm:inline-flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 border border-gray-700 rounded">
-                  ↑↓
+              <span className="hidden sm:inline-flex items-center gap-1.5">
+                <kbd className="inline-flex items-center gap-0.5 px-1.5 py-0.5 border border-gray-700 rounded">
+                  <ArrowUp className="w-2.5 h-2.5" />
+                  <ArrowDown className="w-2.5 h-2.5" />
                 </kbd>
                 navigate
               </span>
-              <span className="inline-flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 border border-gray-700 rounded">
-                  ↵
+              <span className="inline-flex items-center gap-1.5">
+                <kbd className="inline-flex items-center gap-0.5 px-1.5 py-0.5 border border-gray-700 rounded">
+                  <CornerDownLeft className="w-2.5 h-2.5" />
                 </kbd>
                 select
               </span>
@@ -481,7 +525,7 @@ export default function SearchModal({ open, onOpenChange }) {
                 onClick={() =>
                   navigate(`/search?q=${encodeURIComponent(trimmed)}`)
                 }
-                className="text-brand-gold hover:underline"
+                className="text-brand-gold hover:underline font-bold"
               >
                 See all results →
               </button>

@@ -2,12 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  MapPin,
+  Phone,
+  Mail,
+  Clock,
+  Building2,
+  Globe,
+  Check,
+  X,
+  AlertCircle,
+  Power,
+  PowerOff,
+  RefreshCw,
+} from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { SkeletonBlock, SkeletonLine } from "@/components/Skeleton";
-
-/* ------------------------------------------------------------------ */
-/*  constants                                                          */
-/* ------------------------------------------------------------------ */
 
 const TOKEN_KEY = "mrf_token";
 const TOKEN_ISSUED_AT_KEY = "mrf_token_issued_at";
@@ -32,12 +45,7 @@ const GHANA_REGIONS = [
   "Ahafo",
 ];
 
-const HOURS_PRESETS = [
-  "11:00-23:00",
-  "10:00-22:00",
-  "12:00-00:00",
-  "24/7",
-];
+const HOURS_PRESETS = ["11:00-23:00", "10:00-22:00", "12:00-00:00", "24/7"];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^[0-9+\-\s()]{7,20}$/;
@@ -55,10 +63,6 @@ const EMPTY_FORM = {
   is_default: false,
   display_order: 0,
 };
-
-/* ------------------------------------------------------------------ */
-/*  helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 function getAdminToken() {
   if (typeof window === "undefined") return null;
@@ -97,21 +101,18 @@ function safeNumber(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-/* ------------------------------------------------------------------ */
-/*  UI primitives                                                      */
-/* ------------------------------------------------------------------ */
-
 function Toast({ toast }) {
   if (!toast) return null;
-  const styles =
-    toast.type === "error"
-      ? "bg-red-950/90 border-red-700 text-red-200"
-      : "bg-emerald-950/90 border-emerald-700 text-emerald-200";
+  const isError = toast.type === "error";
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${styles}`}
+      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-xl border text-sm font-semibold shadow-lg backdrop-blur ${
+        isError
+          ? "bg-red-950/90 border-red-700 text-red-200"
+          : "bg-emerald-950/90 border-emerald-700 text-emerald-200"
+      }`}
     >
       {toast.message}
     </div>
@@ -152,7 +153,6 @@ function Modal({ children, onClose, labelledBy, disableClose = false }) {
     };
   }, []);
 
-  // Focus trap
   useEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
@@ -235,10 +235,6 @@ function BranchGridSkeleton({ count = 4 }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  page                                                               */
-/* ------------------------------------------------------------------ */
-
 export default function AdminBranches() {
   const router = useRouter();
 
@@ -273,7 +269,6 @@ export default function AdminBranches() {
     []
   );
 
-  /* ---------- auth ---------- */
   useEffect(() => {
     const t = getAdminToken();
     if (!t) {
@@ -292,7 +287,6 @@ export default function AdminBranches() {
     return () => window.removeEventListener("storage", onStorage);
   }, [router]);
 
-  /* ---------- authed fetch ---------- */
   const authFetch = useCallback(
     async (url, init = {}) => {
       const headers = {
@@ -310,7 +304,6 @@ export default function AdminBranches() {
     [token, router]
   );
 
-  /* ---------- load ---------- */
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
@@ -321,7 +314,6 @@ export default function AdminBranches() {
         const data = await readJson(res);
         setBranches(Array.isArray(data) ? data : []);
       } else if (res.status === 404) {
-        // Fallback endpoint
         const fallback = await authFetch(`${API_URL}/api/v1/branches`);
         if (!fallback.ok) throw new Error("Couldn't load branches.");
         const data = await readJson(fallback);
@@ -341,11 +333,9 @@ export default function AdminBranches() {
     load();
   }, [token, reloadKey, load]);
 
-  /* ---------- form open/close ---------- */
   const openCreate = useCallback(() => {
     setForm({
       ...EMPTY_FORM,
-      // If no branches yet, default this one to default + active
       is_default: branches.length === 0,
       is_active: true,
     });
@@ -373,7 +363,6 @@ export default function AdminBranches() {
     setShowForm(true);
   }, []);
 
-  /* ---------- validation ---------- */
   const formValidation = useMemo(() => {
     const errs = {};
     if (!form.name.trim()) errs.name = "Name is required.";
@@ -391,7 +380,6 @@ export default function AdminBranches() {
 
   const formValid = Object.keys(formValidation).length === 0;
 
-  /* ---------- save ---------- */
   const handleSave = useCallback(
     async (e) => {
       e.preventDefault();
@@ -442,7 +430,6 @@ export default function AdminBranches() {
     [form, formValid, editing, authFetch, showToast]
   );
 
-  /* ---------- delete ---------- */
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
     const b = deleteTarget;
@@ -471,14 +458,12 @@ export default function AdminBranches() {
     }
   }, [deleteTarget, authFetch, showToast]);
 
-  /* ---------- toggle active (optimistic) ---------- */
   const toggleActive = useCallback(
     async (b) => {
       if (busyIds.has(b.id)) return;
       const prev = branches;
       const next = !b.is_active;
 
-      // Optimistic
       setBranches((list) =>
         list.map((x) => (x.id === b.id ? { ...x, is_active: next } : x))
       );
@@ -496,7 +481,7 @@ export default function AdminBranches() {
         }
         showToast(next ? "Branch activated." : "Branch deactivated.");
       } catch (err) {
-        setBranches(prev); // rollback
+        setBranches(prev);
         showToast(err.message || "Toggle failed.", "error");
       } finally {
         setBusyIds((s) => {
@@ -509,7 +494,6 @@ export default function AdminBranches() {
     [branches, busyIds, authFetch, showToast]
   );
 
-  /* ---------- render guard ---------- */
   if (!authChecked || !token) {
     return (
       <div>
@@ -521,7 +505,6 @@ export default function AdminBranches() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
         <div>
           <h1 className="font-heading text-3xl font-extrabold text-white">
@@ -534,36 +517,35 @@ export default function AdminBranches() {
         </div>
         <button
           onClick={openCreate}
-          className="px-5 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
         >
-          + New Branch
+          <Plus className="w-4 h-4" />
+          New Branch
         </button>
       </div>
 
-      {/* Error */}
       {error && (
         <div
           role="alert"
           className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-3"
         >
+          <AlertCircle className="w-5 h-5 shrink-0" />
           <span className="flex-1">{error}</span>
           <button
             onClick={() => setReloadKey((k) => k + 1)}
-            className="text-xs font-bold underline hover:no-underline"
+            className="flex items-center gap-1 text-xs font-bold underline hover:no-underline"
           >
+            <RefreshCw className="w-3 h-3" />
             Retry
           </button>
         </div>
       )}
 
-      {/* List */}
       {loading ? (
         <BranchGridSkeleton count={4} />
       ) : branches.length === 0 ? (
         <div className="bg-brand-card border border-gray-700 rounded-2xl p-12 text-center">
-          <div className="text-5xl mb-3" aria-hidden="true">
-            🏬
-          </div>
+          <Building2 className="w-12 h-12 text-gray-600 mx-auto mb-3" />
           <h2 className="font-bold text-white text-lg">No branches yet</h2>
           <p className="text-gray-400 text-sm mt-1 max-w-sm mx-auto">
             Create your first branch to start accepting orders.
@@ -596,7 +578,8 @@ export default function AdminBranches() {
                         {b.name}
                       </h3>
                       {b.is_default && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-brand-gold/20 text-brand-gold font-bold">
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-brand-gold/20 text-brand-gold font-bold flex items-center gap-1">
+                          <Check className="w-3 h-3" />
                           DEFAULT
                         </span>
                       )}
@@ -614,44 +597,74 @@ export default function AdminBranches() {
                   </div>
                 </div>
 
-                {/* Zone badges */}
                 <div className="flex flex-wrap gap-2 mb-3">
-                  <span className="text-[11px] px-2 py-1 rounded-lg bg-brand-gold/10 text-brand-gold font-bold border border-brand-gold/30">
-                    📍 {zoneCount} zone{zoneCount === 1 ? "" : "s"}
+                  <span className="text-[11px] px-2 py-1 rounded-lg bg-brand-gold/10 text-brand-gold font-bold border border-brand-gold/30 flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {zoneCount} zone{zoneCount === 1 ? "" : "s"}
                   </span>
                   {sharedCount > 0 && (
-                    <span className="text-[11px] px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 font-bold border border-blue-500/30">
-                      🌍 {sharedCount} shared
+                    <span className="text-[11px] px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 font-bold border border-blue-500/30 flex items-center gap-1">
+                      <Globe className="w-3 h-3" />
+                      {sharedCount} shared
                     </span>
                   )}
                 </div>
 
                 <div className="space-y-1 text-xs text-gray-300 mb-3">
-                  {b.phone && <div>📞 {b.phone}</div>}
-                  {b.email && <div className="truncate">✉️ {b.email}</div>}
+                  {b.phone && (
+                    <div className="flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-gray-500" />
+                      {b.phone}
+                    </div>
+                  )}
+                  {b.email && (
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Mail className="w-3.5 h-3.5 text-gray-500" />
+                      {b.email}
+                    </div>
+                  )}
                   {b.address && (
-                    <div className="truncate">
-                      📍 {b.address}
+                    <div className="flex items-center gap-1.5 truncate">
+                      <MapPin className="w-3.5 h-3.5 text-gray-500" />
+                      {b.address}
                       {b.city && `, ${b.city}`}
                     </div>
                   )}
-                  {b.opening_hours && <div>🕒 {b.opening_hours}</div>}
+                  {b.opening_hours && (
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-gray-500" />
+                      {b.opening_hours}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2 pt-3 border-t border-gray-800">
                   <button
                     onClick={() => openEdit(b)}
                     disabled={busy}
-                    className="flex-1 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600"
+                    className="flex-1 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-gray-600 flex items-center justify-center gap-1.5"
                   >
+                    <Pencil className="w-3.5 h-3.5" />
                     Edit
                   </button>
                   <button
                     onClick={() => toggleActive(b)}
                     disabled={busy}
-                    className="flex-1 py-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 disabled:opacity-50 text-amber-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                    className="flex-1 py-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 disabled:opacity-50 text-amber-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/40 flex items-center justify-center gap-1.5"
                   >
-                    {busy ? "…" : b.is_active ? "Deactivate" : "Activate"}
+                    {busy ? (
+                      "…"
+                    ) : b.is_active ? (
+                      <>
+                        <PowerOff className="w-3.5 h-3.5" />
+                        Deactivate
+                      </>
+                    ) : (
+                      <>
+                        <Power className="w-3.5 h-3.5" />
+                        Activate
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={() => setDeleteTarget(b)}
@@ -664,7 +677,7 @@ export default function AdminBranches() {
                     aria-label={`Delete ${b.name}`}
                     className="px-3 py-2 rounded-lg bg-red-600/20 hover:bg-red-600/30 disabled:opacity-40 disabled:cursor-not-allowed text-red-400 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/40"
                   >
-                    🗑
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </article>
@@ -673,14 +686,17 @@ export default function AdminBranches() {
         </div>
       )}
 
-      {/* ---------- Add/Edit form modal ---------- */}
       {showForm && (
         <Modal
           onClose={() => setShowForm(false)}
           labelledBy="branch-form-title"
           disableClose={saving}
         >
-          <form onSubmit={handleSave} aria-busy={saving} className="p-6 space-y-4">
+          <form
+            onSubmit={handleSave}
+            aria-busy={saving}
+            className="p-6 space-y-4"
+          >
             <div className="flex justify-between items-center pb-4 border-b border-gray-700">
               <h3
                 id="branch-form-title"
@@ -695,15 +711,16 @@ export default function AdminBranches() {
                 aria-label="Close"
                 className="text-gray-400 hover:text-white p-1 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-600 disabled:opacity-50"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {formError && (
               <div
                 role="alert"
-                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs"
+                className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-start gap-2"
               >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 {formError}
               </div>
             )}
@@ -920,7 +937,6 @@ export default function AdminBranches() {
               )}
             </Field>
 
-            {/* Sticky footer */}
             <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 bg-brand-card border-t border-gray-700 flex gap-3">
               <button
                 type="button"
@@ -935,14 +951,17 @@ export default function AdminBranches() {
                 disabled={saving || !formValid}
                 className="flex-1 py-3 rounded-xl bg-brand-gold hover:bg-brand-amber disabled:opacity-50 disabled:cursor-not-allowed text-brand-dark font-extrabold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-gold/60"
               >
-                {saving ? "Saving…" : editing ? "Save Changes" : "Create Branch"}
+                {saving
+                  ? "Saving…"
+                  : editing
+                  ? "Save Changes"
+                  : "Create Branch"}
               </button>
             </div>
           </form>
         </Modal>
       )}
 
-      {/* ---------- Delete confirm ---------- */}
       {deleteTarget && (
         <Modal
           onClose={() => (deleting ? null : setDeleteTarget(null))}
@@ -950,12 +969,17 @@ export default function AdminBranches() {
           disableClose={deleting}
         >
           <div className="p-6 space-y-4">
-            <h3
-              id="delete-branch-title"
-              className="font-heading text-lg font-bold text-white"
-            >
-              Delete branch?
-            </h3>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-red-400" />
+              </div>
+              <h3
+                id="delete-branch-title"
+                className="font-heading text-lg font-bold text-white"
+              >
+                Delete branch?
+              </h3>
+            </div>
             <p className="text-sm text-gray-400">
               You're about to delete{" "}
               <span className="text-white font-bold">
